@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 
-const LEAD_STATUSES = ['order_placed', 'follow_up_later', 'not_now'];
+const LEAD_STATUSES = ['order_placed', 'follow_up_later', 'payment_talk', 'not_now'];
 
 const leadSchema = new mongoose.Schema(
   {

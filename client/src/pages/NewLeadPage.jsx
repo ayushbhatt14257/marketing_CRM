@@ -256,9 +256,11 @@ export default function NewLeadPage() {
               <StatusSelector value={status} onChange={setStatus} />
             </div>
 
-            {status === 'follow_up_later' && (
+            {(status === 'follow_up_later' || status === 'payment_talk') && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Next follow-up date</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Next follow-up date <span className="text-gray-400 font-normal">(optional for Payment Talk)</span>
+                </label>
                 <input
                   type="date"
                   value={nextFollowUpDate}

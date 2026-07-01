@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle2, Clock, XCircle } from 'lucide-react';
+import { CheckCircle2, Clock, CreditCard, XCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { leadsApi } from '../api/endpoints';
 import StatusSelector from '../components/StatusSelector';
@@ -9,6 +9,7 @@ import StatusSelector from '../components/StatusSelector';
 const STATUS_META = {
   order_placed: { label: 'Order Received', icon: CheckCircle2, color: 'text-green-600 bg-green-50' },
   follow_up_later: { label: 'Follow Up Later', icon: Clock, color: 'text-amber-600 bg-amber-50' },
+  payment_talk: { label: 'Payment Talk', icon: CreditCard, color: 'text-purple-600 bg-purple-50' },
   not_now: { label: 'Not Now', icon: XCircle, color: 'text-gray-600 bg-gray-100' },
 };
 
@@ -29,7 +30,7 @@ export default function LeadDetailPage() {
   if (!data) return <p className="text-gray-400">Lead not found.</p>;
 
   const { lead, history } = data;
-  const isClosed = lead.currentStatus === 'not_now';
+  const isClosed = lead.currentStatus === 'not_now'; // only not_now is terminal
   const CurrentIcon = STATUS_META[lead.currentStatus].icon;
 
   // "Order Received" only unlocks on/after the follow-up date for follow_up_later leads.
@@ -96,11 +97,12 @@ export default function LeadDetailPage() {
           {/* Pass hideOrderPlaced — "Order Received" hidden until follow-up date arrives */}
           <StatusSelector value={status} onChange={setStatus} hideOrderPlaced={hideOrderPlaced} />
 
-          {status === 'follow_up_later' && (
+          {(status === 'follow_up_later' || status === 'payment_talk') && (
             <input
               type="date"
               value={nextFollowUpDate}
               onChange={(e) => setNextFollowUpDate(e.target.value)}
+              placeholder="Next follow-up date (optional for Payment Talk)"
               className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
             />
           )}

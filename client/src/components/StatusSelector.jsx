@@ -1,9 +1,34 @@
-import { CheckCircle2, Clock, XCircle, Lock } from 'lucide-react';
+import { CheckCircle2, Clock, CreditCard, XCircle, Lock } from 'lucide-react';
 
 const STATUS_CONFIG = [
-  { value: 'order_placed', label: 'Order Received', icon: CheckCircle2, active: 'bg-green-600 text-white border-green-600', idle: 'border-gray-300 text-gray-600 hover:border-green-400 hover:text-green-600' },
-  { value: 'follow_up_later', label: 'Follow Up Later', icon: Clock, active: 'bg-amber-500 text-white border-amber-500', idle: 'border-gray-300 text-gray-600 hover:border-amber-400 hover:text-amber-600' },
-  { value: 'not_now', label: 'Not Now', icon: XCircle, active: 'bg-gray-700 text-white border-gray-700', idle: 'border-gray-300 text-gray-600 hover:border-gray-500' },
+  {
+    value: 'order_placed',
+    label: 'Order Received',
+    icon: CheckCircle2,
+    active: 'bg-green-600 text-white border-green-600',
+    idle: 'border-gray-300 text-gray-600 hover:border-green-400 hover:text-green-600',
+  },
+  {
+    value: 'follow_up_later',
+    label: 'Follow Up Later',
+    icon: Clock,
+    active: 'bg-amber-500 text-white border-amber-500',
+    idle: 'border-gray-300 text-gray-600 hover:border-amber-400 hover:text-amber-600',
+  },
+  {
+    value: 'payment_talk',
+    label: 'Payment Talk',
+    icon: CreditCard,
+    active: 'bg-purple-600 text-white border-purple-600',
+    idle: 'border-gray-300 text-gray-600 hover:border-purple-400 hover:text-purple-600',
+  },
+  {
+    value: 'not_now',
+    label: 'Not Now',
+    icon: XCircle,
+    active: 'bg-gray-700 text-white border-gray-700',
+    idle: 'border-gray-300 text-gray-600 hover:border-gray-500',
+  },
 ];
 
 // hideOrderPlaced: true when follow-up date hasn't arrived yet
@@ -14,7 +39,8 @@ export default function StatusSelector({ value, onChange, hideOrderPlaced = fals
 
   return (
     <div className="space-y-2">
-      <div className={`grid gap-2 ${visibleOptions.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
+      {/* 2x2 grid — works well on both mobile and desktop */}
+      <div className="grid grid-cols-2 gap-2">
         {visibleOptions.map(({ value: v, label, icon: Icon, active, idle }) => (
           <button
             key={v}
@@ -30,7 +56,6 @@ export default function StatusSelector({ value, onChange, hideOrderPlaced = fals
         ))}
       </div>
 
-      {/* Locked "Order Received" notice when follow-up date hasn't arrived */}
       {hideOrderPlaced && (
         <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
           <Lock size={13} className="text-gray-400 flex-shrink-0" />

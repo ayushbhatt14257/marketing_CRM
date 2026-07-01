@@ -6,12 +6,14 @@ import { leadsApi } from '../api/endpoints';
 const STATUS_LABELS = {
   order_placed: 'Order Placed',
   follow_up_later: 'Follow Up Later',
+  payment_talk: 'Payment Talk',
   not_now: 'Not Now',
 };
 
 const STATUS_COLORS = {
   order_placed: 'bg-green-100 text-green-700',
   follow_up_later: 'bg-amber-100 text-amber-700',
+  payment_talk: 'bg-purple-100 text-purple-700',
   not_now: 'bg-gray-100 text-gray-600',
 };
 

@@ -90,9 +90,9 @@ const addFollowUp = asyncHandler(async (req, res) => {
   }
 
   lead.currentStatus = status;
-  lead.nextFollowUpDate = status === 'follow_up_later' ? nextFollowUpDate : null;
+  lead.nextFollowUpDate = (status === 'follow_up_later' || status === 'payment_talk') ? (nextFollowUpDate || null) : null;
   lead.lostReason = status === 'not_now' ? lostReason || null : null;
-  lead.isFollowUpClosed = status !== 'follow_up_later';
+  lead.isFollowUpClosed = status === 'order_placed' || status === 'not_now';
   await lead.save();
 
   await FollowUpLog.create({
