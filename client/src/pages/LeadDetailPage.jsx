@@ -7,7 +7,7 @@ import { leadsApi } from '../api/endpoints';
 import StatusSelector from '../components/StatusSelector';
 
 const STATUS_META = {
-  order_placed: { label: 'Order Placed', icon: CheckCircle2, color: 'text-green-600 bg-green-50' },
+  order_placed: { label: 'Order Received', icon: CheckCircle2, color: 'text-green-600 bg-green-50' },
   follow_up_later: { label: 'Follow Up Later', icon: Clock, color: 'text-amber-600 bg-amber-50' },
   not_now: { label: 'Not Now', icon: XCircle, color: 'text-gray-600 bg-gray-100' },
 };
@@ -32,6 +32,14 @@ export default function LeadDetailPage() {
   const isClosed = lead.currentStatus === 'not_now';
   const CurrentIcon = STATUS_META[lead.currentStatus].icon;
 
+  // "Order Received" only unlocks on/after the follow-up date for follow_up_later leads.
+  // Example: follow-up set for 3rd July — user can't mark order before that date.
+  const followUpDatePassed =
+    lead.currentStatus === 'follow_up_later' && lead.nextFollowUpDate
+      ? new Date(lead.nextFollowUpDate) <= new Date()
+      : true;
+  const hideOrderPlaced = !followUpDatePassed;
+
   async function handleSubmit(e) {
     e.preventDefault();
     if (!status) return toast.error('Select an outcome');
@@ -40,9 +48,10 @@ export default function LeadDetailPage() {
     setSubmitting(true);
     try {
       await leadsApi.addFollowUp(id, { status, nextFollowUpDate: nextFollowUpDate || undefined, remark });
-      toast.success(status === 'order_placed' ? 'Order placed — nice work! 🎉' : 'Follow-up logged');
+      toast.success(status === 'order_placed' ? 'Order received — great work! 🎉' : 'Follow-up logged');
       queryClient.invalidateQueries({ queryKey: ['lead', id] });
       queryClient.invalidateQueries({ queryKey: ['due-today'] });
+      queryClient.invalidateQueries({ queryKey: ['user-stats'] });
       setStatus('');
       setRemark('');
       setNextFollowUpDate('');
@@ -55,11 +64,12 @@ export default function LeadDetailPage() {
 
   return (
     <div className="max-w-2xl space-y-6">
+      {/* Lead info card */}
       <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
         <div className="flex items-start justify-between">
           <div>
             <h2 className="text-lg font-semibold text-gray-800">{lead.customerId?.name}</h2>
-            <p className="text-sm text-gray-500">{lead.productId?.name}</p>
+            <p className="text-sm text-gray-500">{lead.productIds?.map((p) => p.name).join(', ')}</p>
           </div>
           <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full ${STATUS_META[lead.currentStatus].color}`}>
             <CurrentIcon size={14} />
@@ -67,14 +77,25 @@ export default function LeadDetailPage() {
           </span>
         </div>
         {lead.nextFollowUpDate && (
-          <p className="text-sm text-gray-500 mt-2">Next follow-up: {new Date(lead.nextFollowUpDate).toLocaleDateString('en-IN')}</p>
+          <p className="text-sm text-gray-500 mt-2">
+            Next follow-up: {new Date(lead.nextFollowUpDate).toLocaleDateString('en-IN')}
+            {hideOrderPlaced && (
+              <span className="ml-2 text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">
+                Not due yet
+              </span>
+            )}
+          </p>
         )}
       </div>
 
+      {/* Follow-up form */}
       {!isClosed && (
         <form onSubmit={handleSubmit} className="bg-white border border-gray-200 rounded-xl p-5 space-y-4 shadow-sm">
           <h3 className="text-sm font-semibold text-gray-700">Add a follow-up</h3>
-          <StatusSelector value={status} onChange={setStatus} />
+
+          {/* Pass hideOrderPlaced — "Order Received" hidden until follow-up date arrives */}
+          <StatusSelector value={status} onChange={setStatus} hideOrderPlaced={hideOrderPlaced} />
+
           {status === 'follow_up_later' && (
             <input
               type="date"
@@ -99,12 +120,14 @@ export default function LeadDetailPage() {
           </button>
         </form>
       )}
+
       {isClosed && (
         <p className="text-sm text-gray-500 bg-gray-50 border border-gray-200 rounded-xl p-4">
           This lead is closed (Not Now) and cannot be reopened.
         </p>
       )}
 
+      {/* History */}
       <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
         <h3 className="text-sm font-semibold text-gray-700 mb-3">History</h3>
         <div className="space-y-3">
@@ -120,7 +143,6 @@ export default function LeadDetailPage() {
                   <p className="text-xs text-gray-400">{new Date(h.createdAt).toLocaleString('en-IN')}</p>
                   <p className="text-sm text-gray-700 font-medium">{meta.label}</p>
                   {h.remark && <p className="text-sm text-gray-500 mt-0.5">{h.remark}</p>}
-                  {h.todaysReport && <p className="text-sm text-gray-500 mt-0.5">{h.todaysReport}</p>}
                 </div>
               </div>
             );

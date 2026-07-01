@@ -7,7 +7,10 @@ const asyncHandler = require('../utils/asyncHandler');
 const { awardPoints } = require('../services/pointsEngine');
 const { startOfTodayIST, endOfTodayIST, startOfWeekIST, startOfMonthIST } = require('../utils/dateHelpers');
 
-// Find-or-create customer by name (name-only matching, per SRS decision)
+function escapeRegex(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 async function resolveCustomer(name, userId) {
   const normalizedName = name.trim().toLowerCase();
   let customer = await Customer.findOne({ normalizedName });
@@ -18,13 +21,16 @@ async function resolveCustomer(name, userId) {
 }
 
 const createLead = asyncHandler(async (req, res) => {
-  const { customerName, customerId, productId, status, nextFollowUpDate, remark, todaysReport } = req.body;
+  const {
+    customerName, customerId, productIds, status,
+    nextFollowUpDate, remark, todaysReport, lostReason, isNewCustomer
+  } = req.body;
 
-  if (!productId || !status) {
-    return res.status(400).json({ message: 'Product and status are required' });
+  if (!productIds || !productIds.length) {
+    return res.status(400).json({ message: 'At least one product is required' });
   }
-  if (!Lead.STATUSES.includes(status)) {
-    return res.status(400).json({ message: 'Invalid status' });
+  if (!status || !Lead.STATUSES.includes(status)) {
+    return res.status(400).json({ message: 'Valid status is required' });
   }
   if (status === 'follow_up_later' && !nextFollowUpDate) {
     return res.status(400).json({ message: 'Next follow-up date is required when status is Follow Up Later' });
@@ -41,11 +47,12 @@ const createLead = asyncHandler(async (req, res) => {
 
   const lead = await Lead.create({
     customerId: customer._id,
-    productId,
+    productIds: Array.isArray(productIds) ? productIds : [productIds],
     ownerId: req.user._id,
+    isNewCustomer: !!isNewCustomer,
     currentStatus: status,
     nextFollowUpDate: status === 'follow_up_later' ? nextFollowUpDate : null,
-    lostReason: status === 'not_now' ? req.body.lostReason || null : null,
+    lostReason: status === 'not_now' ? lostReason || null : null,
   });
 
   await FollowUpLog.create({
@@ -60,11 +67,10 @@ const createLead = asyncHandler(async (req, res) => {
   await awardPoints(req.user._id, 'lead_created', lead._id);
   await AuditLog.create({ userId: req.user._id, action: 'lead.create', entityType: 'Lead', entityId: lead._id });
 
-  const populated = await Lead.findById(lead._id).populate('customerId productId');
+  const populated = await Lead.findById(lead._id).populate('customerId productIds');
   res.status(201).json({ lead: populated });
 });
 
-// Add a new follow-up activity entry to an existing lead (does NOT overwrite history)
 const addFollowUp = asyncHandler(async (req, res) => {
   const lead = await Lead.findById(req.params.id);
   if (!lead) return res.status(404).json({ message: 'Lead not found' });
@@ -82,8 +88,6 @@ const addFollowUp = asyncHandler(async (req, res) => {
   if (status === 'follow_up_later' && !nextFollowUpDate) {
     return res.status(400).json({ message: 'Next follow-up date is required when status is Follow Up Later' });
   }
-
-  const wasOverdue = lead.nextFollowUpDate && lead.nextFollowUpDate < startOfTodayIST();
 
   lead.currentStatus = status;
   lead.nextFollowUpDate = status === 'follow_up_later' ? nextFollowUpDate : null;
@@ -105,15 +109,14 @@ const addFollowUp = asyncHandler(async (req, res) => {
     action: 'lead.followup_added',
     entityType: 'Lead',
     entityId: lead._id,
-    diff: { wasOverdue, newStatus: status },
   });
 
-  const populated = await Lead.findById(lead._id).populate('customerId productId');
+  const populated = await Lead.findById(lead._id).populate('customerId productIds');
   res.json({ lead: populated });
 });
 
 const getLead = asyncHandler(async (req, res) => {
-  const lead = await Lead.findById(req.params.id).populate('customerId productId ownerId', 'name email');
+  const lead = await Lead.findById(req.params.id).populate('customerId productIds ownerId', 'name email');
   if (!lead) return res.status(404).json({ message: 'Lead not found' });
   if (String(lead.ownerId._id || lead.ownerId) !== String(req.user._id) && req.user.role !== 'admin') {
     return res.status(403).json({ message: 'Not authorized to view this lead' });
@@ -139,35 +142,79 @@ const listLeads = asyncHandler(async (req, res) => {
     filter.createdAt = { $gte: new Date(from), $lte: new Date(to) };
   }
 
-  let query = Lead.find(filter).populate('customerId productId').sort({ updatedAt: -1 });
-
   if (search) {
-    // Search by customer name requires a join; simplest correct approach is to first match customers
-    const Customer = require('../models/Customer');
-    const matchingCustomers = await Customer.find({ normalizedName: { $regex: search.trim().toLowerCase() } }).select('_id');
+    const matchingCustomers = await Customer.find({
+      normalizedName: { $regex: escapeRegex(search.trim().toLowerCase()) }
+    }).select('_id');
     filter.customerId = { $in: matchingCustomers.map((c) => c._id) };
-    query = Lead.find(filter).populate('customerId productId').sort({ updatedAt: -1 });
   }
 
   const skip = (Number(page) - 1) * Number(limit);
+
   const [leads, total] = await Promise.all([
-    query.skip(skip).limit(Number(limit)),
+    Lead.find(filter).populate('customerId productIds').sort({ updatedAt: -1 }).skip(skip).limit(Number(limit)),
     Lead.countDocuments(filter),
   ]);
 
-  res.json({ leads, total, page: Number(page), pages: Math.ceil(total / Number(limit)) });
+  // Attach latest remark from FollowUpLog to each lead
+  const leadIds = leads.map((l) => l._id);
+  const latestLogs = await FollowUpLog.aggregate([
+    { $match: { leadId: { $in: leadIds } } },
+    { $sort: { createdAt: -1 } },
+    { $group: { _id: '$leadId', remark: { $first: '$remark' }, createdAt: { $first: '$createdAt' } } },
+  ]);
+
+  const logMap = {};
+  latestLogs.forEach((l) => { logMap[String(l._id)] = l.remark; });
+
+  const leadsWithRemark = leads.map((l) => ({
+    ...l.toObject(),
+    lastRemark: logMap[String(l._id)] || '',
+  }));
+
+  res.json({ leads: leadsWithRemark, total, page: Number(page), pages: Math.ceil(total / Number(limit)) });
 });
 
 const dueToday = asyncHandler(async (req, res) => {
   const leads = await Lead.find({
     ownerId: req.user._id,
     currentStatus: 'follow_up_later',
-    nextFollowUpDate: { $lte: endOfTodayIST() }, // includes overdue + due today
+    nextFollowUpDate: { $lte: endOfTodayIST() },
   })
-    .populate('customerId productId')
+    .populate('customerId productIds')
     .sort({ nextFollowUpDate: 1 });
 
   res.json({ leads });
 });
 
 module.exports = { createLead, addFollowUp, getLead, listLeads, dueToday };
+
+// All pending follow-ups for the user — sorted by date (overdue first, then upcoming)
+// Used by the dashboard "Follow-up Pipeline" section
+const followUpPipeline = asyncHandler(async (req, res) => {
+  const leads = await Lead.find({
+    ownerId: req.user._id,
+    currentStatus: 'follow_up_later',
+  })
+    .populate('customerId productIds')
+    .sort({ nextFollowUpDate: 1 }); // earliest first (overdue at top)
+
+  // Tag each lead: overdue, due-today, or upcoming
+  const today = new Date();
+  today.setHours(23, 59, 59, 999);
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+
+  const tagged = leads.map((lead) => {
+    const followDate = new Date(lead.nextFollowUpDate);
+    let tag;
+    if (followDate < todayStart) tag = 'overdue';
+    else if (followDate <= today) tag = 'due-today';
+    else tag = 'upcoming';
+    return { ...lead.toObject(), tag };
+  });
+
+  res.json({ leads: tagged });
+});
+
+module.exports = { createLead, addFollowUp, getLead, listLeads, dueToday, followUpPipeline };

@@ -11,6 +11,7 @@ export const authApi = {
 export const leadsApi = {
   list: (params) => apiClient.get('/leads', { params }),
   dueToday: () => apiClient.get('/leads/due-today'),
+  pipeline: () => apiClient.get('/leads/pipeline'),
   get: (id) => apiClient.get(`/leads/${id}`),
   create: (payload) => apiClient.post('/leads', payload),
   addFollowUp: (id, payload) => apiClient.post(`/leads/${id}/followups`, payload),
