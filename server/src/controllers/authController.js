@@ -38,12 +38,14 @@ const login = asyncHandler(async (req, res) => {
   res.cookie(REFRESH_COOKIE_NAME, refreshToken, REFRESH_COOKIE_OPTIONS);
   res.json({
     accessToken,
+    refreshToken, // also sent in body so Safari/iPhone can store in localStorage
     user: { id: user._id, name: user.name, email: user.email, role: user.role },
   });
 });
 
 const refresh = asyncHandler(async (req, res) => {
-  const token = req.cookies?.[REFRESH_COOKIE_NAME];
+  // Try cookie first (Chrome/Firefox), then body token (Safari/iPhone fallback)
+  const token = req.cookies?.[REFRESH_COOKIE_NAME] || req.body?.refreshToken;
   if (!token) return res.status(401).json({ message: 'No refresh token' });
 
   let payload;
@@ -59,7 +61,9 @@ const refresh = asyncHandler(async (req, res) => {
   }
 
   const accessToken = generateAccessToken(user);
-  res.json({ accessToken });
+  const newRefreshToken = generateRefreshToken(user); // rotate refresh token
+  res.cookie(REFRESH_COOKIE_NAME, newRefreshToken, REFRESH_COOKIE_OPTIONS);
+  res.json({ accessToken, refreshToken: newRefreshToken });
 });
 
 const logout = asyncHandler(async (req, res) => {

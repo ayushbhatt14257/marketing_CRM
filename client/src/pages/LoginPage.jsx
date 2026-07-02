@@ -16,7 +16,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const { data } = await authApi.login(email, password);
-      login(data.user, data.accessToken);
+      login(data.user, data.accessToken, data.refreshToken);
       navigate('/dashboard');
     } catch (err) {
       toast.error(err.response?.data?.message || 'Login failed');

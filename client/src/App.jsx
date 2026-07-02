@@ -20,40 +20,62 @@ import AdminReportsPage from './pages/admin/AdminReportsPage';
 
 export default function App() {
   const [bootstrapped, setBootstrapped] = useState(false);
-  const { user, accessToken, login, setAccessToken } = useAuthStore();
+  const { user, accessToken, refreshToken, login, updateTokens } = useAuthStore();
 
   useEffect(() => {
     async function bootstrap() {
-      // If localStorage already has a token (Safari/iPhone fix), verify it's still valid
+      // Step 1: If we have a stored access token, try using it directly
       if (accessToken && user) {
         try {
-          await authApi.me(); // will fail with 401 if token expired
+          await authApi.me();
           setBootstrapped(true);
-          return;
+          return; // Token still valid — done
         } catch {
-          // Token expired — fall through to refresh attempt
+          // Access token expired, try to refresh below
         }
       }
 
-      // Try cookie-based refresh (works on Chrome/Firefox, not Safari cross-origin)
+      // Step 2: Try cookie-based refresh (Chrome/Firefox on desktop)
       try {
         const { data } = await apiClient.post('/auth/refresh');
-        setAccessToken(data.accessToken);
+        updateTokens(data.accessToken, data.refreshToken);
         const me = await authApi.me();
-        login(me.data.user, data.accessToken);
-      } catch {
-        useAuthStore.getState().logout();
-      } finally {
+        login(me.data.user, data.accessToken, data.refreshToken);
         setBootstrapped(true);
+        return;
+      } catch {
+        // Cookie refresh failed (expected on Safari/iPhone cross-origin)
       }
+
+      // Step 3: Safari/iPhone fallback — use refresh token from localStorage
+      if (refreshToken) {
+        try {
+          const { data } = await apiClient.post('/auth/refresh', { refreshToken });
+          updateTokens(data.accessToken, data.refreshToken);
+          const me = await authApi.me();
+          login(me.data.user, data.accessToken, data.refreshToken);
+          setBootstrapped(true);
+          return;
+        } catch {
+          // Refresh token also expired (30 days) — user must login again
+        }
+      }
+
+      // All attempts failed — clear state and show login
+      useAuthStore.getState().logout();
+      setBootstrapped(true);
     }
+
     bootstrap();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!bootstrapped) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-gray-400 text-sm">
-        Loading...
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="w-8 h-8 border-2 border-brand-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+          <p className="text-sm text-gray-400">Loading...</p>
+        </div>
       </div>
     );
   }

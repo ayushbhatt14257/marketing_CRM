@@ -3,7 +3,7 @@ import { useAuthStore } from '../store/authStore';
 
 const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api',
-  withCredentials: true, // sends the httpOnly refresh-token cookie
+  withCredentials: true,
 });
 
 apiClient.interceptors.request.use((config) => {
@@ -12,7 +12,6 @@ apiClient.interceptors.request.use((config) => {
   return config;
 });
 
-// On 401, try a single silent refresh, then retry the original request once.
 let isRefreshing = false;
 let queue = [];
 
@@ -20,7 +19,7 @@ apiClient.interceptors.response.use(
   (res) => res,
   async (error) => {
     const originalRequest = error.config;
-    if (error.response?.status === 401 && !originalRequest._retry && !originalRequest.url.includes('/auth/')) {
+    if (error.response?.status === 401 && !originalRequest._retry && !originalRequest.url?.includes('/auth/')) {
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
           queue.push({ resolve, reject });
@@ -29,18 +28,23 @@ apiClient.interceptors.response.use(
 
       originalRequest._retry = true;
       isRefreshing = true;
+
       try {
-        const { data } = await apiClient.post('/auth/refresh');
-        useAuthStore.getState().setAccessToken(data.accessToken);
+        // Try cookie first, fall back to localStorage refresh token (Safari/iPhone)
+        const storedRefreshToken = useAuthStore.getState().refreshToken;
+        const { data } = await apiClient.post('/auth/refresh',
+          storedRefreshToken ? { refreshToken: storedRefreshToken } : {}
+        );
+        useAuthStore.getState().updateTokens(data.accessToken, data.refreshToken);
         queue.forEach((p) => p.resolve());
         queue = [];
         return apiClient(originalRequest);
-      } catch (refreshError) {
-        queue.forEach((p) => p.reject(refreshError));
+      } catch {
+        queue.forEach((p) => p.reject());
         queue = [];
         useAuthStore.getState().logout();
         window.location.href = '/login';
-        return Promise.reject(refreshError);
+        return Promise.reject(error);
       } finally {
         isRefreshing = false;
       }
