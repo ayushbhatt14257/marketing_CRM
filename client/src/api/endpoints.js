@@ -25,7 +25,7 @@ export const customersApi = {
 
 export const productsApi = {
   list: (includeInactive = false) => apiClient.get('/products', { params: { includeInactive } }),
-  create: (name) => apiClient.post('/products', { name }),
+  create: (name, category = 'fonfox') => apiClient.post('/products', { name, category }),
   update: (id, payload) => apiClient.put(`/products/${id}`, payload),
   remove: (id) => apiClient.delete(`/products/${id}`),
 };

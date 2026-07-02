@@ -20,28 +20,42 @@ import AdminReportsPage from './pages/admin/AdminReportsPage';
 
 export default function App() {
   const [bootstrapped, setBootstrapped] = useState(false);
-  const login = useAuthStore((s) => s.login);
+  const { user, accessToken, login, setAccessToken } = useAuthStore();
 
-  // On app load, try to silently refresh the session using the httpOnly cookie,
-  // so a page refresh doesn't force a re-login.
   useEffect(() => {
     async function bootstrap() {
+      // If localStorage already has a token (Safari/iPhone fix), verify it's still valid
+      if (accessToken && user) {
+        try {
+          await authApi.me(); // will fail with 401 if token expired
+          setBootstrapped(true);
+          return;
+        } catch {
+          // Token expired — fall through to refresh attempt
+        }
+      }
+
+      // Try cookie-based refresh (works on Chrome/Firefox, not Safari cross-origin)
       try {
         const { data } = await apiClient.post('/auth/refresh');
-        useAuthStore.getState().setAccessToken(data.accessToken);
+        setAccessToken(data.accessToken);
         const me = await authApi.me();
         login(me.data.user, data.accessToken);
       } catch {
-        // not logged in — fine, user will see the login page
+        useAuthStore.getState().logout();
       } finally {
         setBootstrapped(true);
       }
     }
     bootstrap();
-  }, [login]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!bootstrapped) {
-    return <div className="min-h-screen flex items-center justify-center text-gray-400 text-sm">Loading...</div>;
+    return (
+      <div className="min-h-screen flex items-center justify-center text-gray-400 text-sm">
+        Loading...
+      </div>
+    );
   }
 
   return (
