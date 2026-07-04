@@ -13,10 +13,13 @@ import DashboardPage from './pages/DashboardPage';
 import NewLeadPage from './pages/NewLeadPage';
 import LeadsListPage from './pages/LeadsListPage';
 import LeadDetailPage from './pages/LeadDetailPage';
+import ChangePasswordPage from './pages/ChangePasswordPage';
 import AdminUsersPage from './pages/admin/AdminUsersPage';
 import AdminProductsPage from './pages/admin/AdminProductsPage';
 import AdminCustomersPage from './pages/admin/AdminCustomersPage';
 import AdminReportsPage from './pages/admin/AdminReportsPage';
+import AdminUserDetailPage from './pages/admin/AdminUserDetailPage';
+import AdminAssignLeadPage from './pages/admin/AdminAssignLeadPage';
 
 export default function App() {
   const [bootstrapped, setBootstrapped] = useState(false);
@@ -24,18 +27,14 @@ export default function App() {
 
   useEffect(() => {
     async function bootstrap() {
-      // Step 1: If we have a stored access token, try using it directly
       if (accessToken && user) {
         try {
           await authApi.me();
           setBootstrapped(true);
-          return; // Token still valid — done
-        } catch {
-          // Access token expired, try to refresh below
-        }
+          return;
+        } catch { /* expired, fall through */ }
       }
 
-      // Step 2: Try cookie-based refresh (Chrome/Firefox on desktop)
       try {
         const { data } = await apiClient.post('/auth/refresh');
         updateTokens(data.accessToken, data.refreshToken);
@@ -43,11 +42,8 @@ export default function App() {
         login(me.data.user, data.accessToken, data.refreshToken);
         setBootstrapped(true);
         return;
-      } catch {
-        // Cookie refresh failed (expected on Safari/iPhone cross-origin)
-      }
+      } catch { /* cookie failed */ }
 
-      // Step 3: Safari/iPhone fallback — use refresh token from localStorage
       if (refreshToken) {
         try {
           const { data } = await apiClient.post('/auth/refresh', { refreshToken });
@@ -56,18 +52,14 @@ export default function App() {
           login(me.data.user, data.accessToken, data.refreshToken);
           setBootstrapped(true);
           return;
-        } catch {
-          // Refresh token also expired (30 days) — user must login again
-        }
+        } catch { /* refresh token expired */ }
       }
 
-      // All attempts failed — clear state and show login
       useAuthStore.getState().logout();
       setBootstrapped(true);
     }
-
     bootstrap();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []); // eslint-disable-line
 
   if (!bootstrapped) {
     return (
@@ -85,23 +77,23 @@ export default function App() {
       <Toaster position="top-right" />
       <Routes>
         <Route path="/login" element={<LoginPage />} />
-
         <Route element={<RequireAuth />}>
           <Route element={<AppLayout />}>
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/leads/new" element={<NewLeadPage />} />
             <Route path="/leads" element={<LeadsListPage />} />
             <Route path="/leads/:id" element={<LeadDetailPage />} />
-
+            <Route path="/change-password" element={<ChangePasswordPage />} />
             <Route element={<RequireAdmin />}>
+              <Route path="/admin/assign" element={<AdminAssignLeadPage />} />
               <Route path="/admin/users" element={<AdminUsersPage />} />
+              <Route path="/admin/users/:id" element={<AdminUserDetailPage />} />
               <Route path="/admin/products" element={<AdminProductsPage />} />
               <Route path="/admin/customers" element={<AdminCustomersPage />} />
               <Route path="/admin/reports" element={<AdminReportsPage />} />
             </Route>
           </Route>
         </Route>
-
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>

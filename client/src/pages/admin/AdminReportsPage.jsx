@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import { dashboardApi, reportsApi } from '../../api/endpoints';
 import StatCard from '../../components/StatCard';
 
@@ -64,7 +65,14 @@ export default function AdminReportsPage() {
               )}
               {performance?.map((u) => (
                 <tr key={u.userId} className="border-b border-gray-100">
-                  <td className="px-4 py-2.5 font-medium text-gray-800">{u.name}</td>
+                  <td className="px-4 py-2.5 font-medium text-gray-800">
+                    <Link
+                      to={`/admin/users/${u.userId}`}
+                      className="text-brand-600 hover:underline"
+                    >
+                      {u.name}
+                    </Link>
+                  </td>
                   <td className="px-4 py-2.5 text-gray-600">{u.totalLeads}</td>
                   <td className="px-4 py-2.5 text-gray-600">{u.ordersPlaced}</td>
                   <td className="px-4 py-2.5 text-gray-600">{u.dueFollowUps}</td>

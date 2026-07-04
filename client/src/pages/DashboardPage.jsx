@@ -9,6 +9,7 @@ import StatCard from '../components/StatCard';
 import FollowUpCard from '../components/FollowUpCard';
 import PipelineCard from '../components/PipelineCard';
 import PointsBadge, { getNextLevel } from '../components/PointsBadge';
+import NewFeaturePopup from '../components/NewFeaturePopup';
 
 export default function DashboardPage() {
   const user = useAuthStore((s) => s.user);
@@ -75,6 +76,7 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      <NewFeaturePopup />
       {/* Hero */}
       <section
         ref={heroRef}
