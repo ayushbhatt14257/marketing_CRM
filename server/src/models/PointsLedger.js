@@ -6,7 +6,7 @@ const pointsLedgerSchema = new mongoose.Schema(
     points: { type: Number, required: true },
     reason: {
       type: String,
-      enum: ['lead_created', 'report_added', 'followup_on_time', 'followup_late', 'order_placed', 'streak_bonus'],
+      enum: ['daily_login', 'lead_created', 'report_added', 'followup_on_time', 'followup_late', 'order_placed', 'streak_bonus'],
       required: true,
     },
     refId: { type: mongoose.Schema.Types.ObjectId, default: null }, // leadId or followUpLogId

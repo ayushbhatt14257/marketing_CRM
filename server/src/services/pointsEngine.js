@@ -1,28 +1,24 @@
 const PointsLedger = require('../models/PointsLedger');
 const { startOfTodayIST, endOfTodayIST } = require('../utils/dateHelpers');
 
-// v1 rule: 2 points per day maximum — not per lead entry.
-// A user can create 10 leads in a day and still only gets 2 points total for that day.
-// This prevents point-farming by spamming entries.
+// Points are awarded on the FIRST login of each day — not on lead entry.
+// 2 points per day maximum, triggered by login.
 const DAILY_POINTS = 2;
-const DAILY_REASON = 'lead_created';
 
-async function awardPoints(userId, reason, refId = null) {
-  if (reason !== DAILY_REASON) return null;
-
-  // Check if user already earned points today (IST)
+async function awardDailyLoginPoints(userId) {
   const todayStart = startOfTodayIST();
   const todayEnd = endOfTodayIST();
 
+  // Check if already earned today
   const alreadyEarned = await PointsLedger.findOne({
     userId,
-    reason: DAILY_REASON,
+    reason: 'daily_login',
     createdAt: { $gte: todayStart, $lte: todayEnd },
   });
 
   if (alreadyEarned) return null; // Already got today's points
 
-  return PointsLedger.create({ userId, points: DAILY_POINTS, reason, refId });
+  return PointsLedger.create({ userId, points: DAILY_POINTS, reason: 'daily_login', refId: null });
 }
 
 async function getUserPointsSummary(userId, monthStart) {
@@ -43,4 +39,4 @@ async function getUserPointsSummary(userId, monthStart) {
   };
 }
 
-module.exports = { awardPoints, getUserPointsSummary, DAILY_POINTS };
+module.exports = { awardDailyLoginPoints, getUserPointsSummary, DAILY_POINTS };

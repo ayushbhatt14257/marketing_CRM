@@ -3,8 +3,8 @@ const Lead = require('../models/Lead');
 const Customer = require('../models/Customer');
 const FollowUpLog = require('../models/FollowUpLog');
 const AuditLog = require('../models/AuditLog');
+const Notification = require('../models/Notification');
 const asyncHandler = require('../utils/asyncHandler');
-const { awardPoints } = require('../services/pointsEngine');
 const { startOfTodayIST, endOfTodayIST, startOfWeekIST, startOfMonthIST } = require('../utils/dateHelpers');
 
 function escapeRegex(str) {
@@ -23,7 +23,8 @@ async function resolveCustomer(name, userId) {
 const createLead = asyncHandler(async (req, res) => {
   const {
     customerName, customerId, productIds, status,
-    nextFollowUpDate, remark, todaysReport, lostReason, isNewCustomer
+    nextFollowUpDate, remark, todaysReport, lostReason,
+    isNewCustomer, assignTo // assignTo: userId — admin only
   } = req.body;
 
   if (!productIds || !productIds.length) {
@@ -39,19 +40,21 @@ const createLead = asyncHandler(async (req, res) => {
     return res.status(400).json({ message: 'Customer name or customerId is required' });
   }
 
+  // assignTo is only allowed for admins
+  const ownerId = (assignTo && req.user.role === 'admin') ? assignTo : req.user._id;
+
   const customer = customerId
     ? await Customer.findById(customerId)
     : await resolveCustomer(customerName, req.user._id);
-
   if (!customer) return res.status(404).json({ message: 'Customer not found' });
 
   const lead = await Lead.create({
     customerId: customer._id,
     productIds: Array.isArray(productIds) ? productIds : [productIds],
-    ownerId: req.user._id,
+    ownerId,
     isNewCustomer: !!isNewCustomer,
     currentStatus: status,
-    nextFollowUpDate: status === 'follow_up_later' ? nextFollowUpDate : null,
+    nextFollowUpDate: (status === 'follow_up_later' || status === 'payment_talk') ? (nextFollowUpDate || null) : null,
     lostReason: status === 'not_now' ? lostReason || null : null,
   });
 
@@ -61,11 +64,26 @@ const createLead = asyncHandler(async (req, res) => {
     statusAtEntry: status,
     remark: remark || '',
     todaysReport: todaysReport || '',
-    nextFollowUpDateSet: status === 'follow_up_later' ? nextFollowUpDate : null,
+    nextFollowUpDateSet: (status === 'follow_up_later' || status === 'payment_talk') ? (nextFollowUpDate || null) : null,
   });
 
-  await awardPoints(req.user._id, 'lead_created', lead._id);
-  await AuditLog.create({ userId: req.user._id, action: 'lead.create', entityType: 'Lead', entityId: lead._id });
+  // If admin assigned this lead to someone else, send them a notification
+  if (assignTo && req.user.role === 'admin' && String(assignTo) !== String(req.user._id)) {
+    await Notification.create({
+      userId: assignTo,
+      type: 'lead_assigned',
+      refId: lead._id,
+      message: `Admin assigned you a new lead: ${customer.name}`,
+    });
+  }
+
+  await AuditLog.create({
+    userId: req.user._id,
+    action: 'lead.create',
+    entityType: 'Lead',
+    entityId: lead._id,
+    diff: assignTo ? { assignedTo: assignTo } : null,
+  });
 
   const populated = await Lead.findById(lead._id).populate('customerId productIds');
   res.status(201).json({ lead: populated });

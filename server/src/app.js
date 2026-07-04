@@ -17,6 +17,8 @@ const reportRoutes = require('./routes/reports');
 
 const app = express();
 
+const notificationRoutes = require('./routes/notifications');
+
 app.use(helmet());
 app.use(
   cors({
@@ -38,6 +40,7 @@ app.use('/api/customers', customerRoutes);
 app.use('/api/leads', leadRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/reports', reportRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
