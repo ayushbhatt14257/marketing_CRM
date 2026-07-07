@@ -43,6 +43,8 @@ export const dashboardApi = {
   adminStats: () => apiClient.get('/dashboard/admin-stats'),
   userPerformance: (params) => apiClient.get('/dashboard/user-performance', { params }),
   userDetail: (id) => apiClient.get(`/dashboard/user-detail/${id}`),
+  claimDailyPoints: () => apiClient.post('/dashboard/claim-daily-points'),
+  weeklyAttendance: () => apiClient.get('/dashboard/weekly-attendance'),
 };
 
 export const reportsApi = {

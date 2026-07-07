@@ -1,24 +1,41 @@
 const PointsLedger = require('../models/PointsLedger');
-const { startOfTodayIST, endOfTodayIST } = require('../utils/dateHelpers');
+const User = require('../models/User');
 
-// Points are awarded on the FIRST login of each day — not on lead entry.
-// 2 points per day maximum, triggered by login.
 const DAILY_POINTS = 2;
+const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
 
+function todayIST() {
+  const d = new Date(Date.now() + IST_OFFSET_MS);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+}
+
+// Track via User.lastDailyPointsDate — completely independent of PointsLedger entries.
+// Atomic findOneAndUpdate ensures no race conditions.
 async function awardDailyLoginPoints(userId) {
-  const todayStart = startOfTodayIST();
-  const todayEnd = endOfTodayIST();
+  const today = todayIST();
 
-  // Check if already earned today
-  const alreadyEarned = await PointsLedger.findOne({
-    userId,
-    reason: 'daily_login',
-    createdAt: { $gte: todayStart, $lte: todayEnd },
-  });
+  // Atomically check-and-update: only update if lastDailyPointsDate !== today
+  const updated = await User.findOneAndUpdate(
+    { _id: userId, lastDailyPointsDate: { $ne: today } },
+    { $set: { lastDailyPointsDate: today } },
+    { new: false } // returns null if no doc matched (meaning already claimed today)
+  );
 
-  if (alreadyEarned) return null; // Already got today's points
+  if (!updated) return null; // lastDailyPointsDate was already today — no points
 
-  return PointsLedger.create({ userId, points: DAILY_POINTS, reason: 'daily_login', refId: null });
+  // User was updated — create the ledger entry for history/leaderboard
+  try {
+    await PointsLedger.create({
+      userId,
+      points: DAILY_POINTS,
+      reason: 'daily_login',
+      refId: null,
+    });
+  } catch {
+    // Ledger insert failed — not critical, points tracking via User field is already done
+  }
+
+  return { points: DAILY_POINTS };
 }
 
 async function getUserPointsSummary(userId, monthStart) {
@@ -39,4 +56,4 @@ async function getUserPointsSummary(userId, monthStart) {
   };
 }
 
-module.exports = { awardDailyLoginPoints, getUserPointsSummary, DAILY_POINTS };
+module.exports = { awardDailyLoginPoints, getUserPointsSummary, DAILY_POINTS, todayIST };

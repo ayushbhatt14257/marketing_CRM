@@ -3,6 +3,11 @@ import { Link } from 'react-router-dom';
 import { dashboardApi, reportsApi } from '../../api/endpoints';
 import StatCard from '../../components/StatCard';
 
+const DAY_COLORS = {
+  true: 'bg-green-500',
+  false: 'bg-gray-200',
+};
+
 export default function AdminReportsPage() {
   const { data: adminStats, isLoading: statsLoading } = useQuery({
     queryKey: ['admin-stats'],
@@ -14,10 +19,16 @@ export default function AdminReportsPage() {
     queryFn: () => dashboardApi.userPerformance().then((r) => r.data.users),
   });
 
+  const { data: attendance, isLoading: attendanceLoading } = useQuery({
+    queryKey: ['weekly-attendance'],
+    queryFn: () => dashboardApi.weeklyAttendance().then((r) => r.data),
+  });
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <h2 className="text-xl font-semibold text-gray-800">Reports & Analytics</h2>
 
+      {/* Stats grid */}
       <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <StatCard label="Total Users" value={adminStats?.totalUsers} loading={statsLoading} />
         <StatCard label="Active Users" value={adminStats?.activeUsers} loading={statsLoading} />
@@ -28,16 +39,85 @@ export default function AdminReportsPage() {
         <StatCard label="Closed Follow-ups" value={adminStats?.closedFollowUps} loading={statsLoading} />
       </section>
 
+      {/* Weekly Attendance */}
+      <section>
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h3 className="text-base font-semibold text-gray-800">Weekly Login Attendance</h3>
+            <p className="text-xs text-gray-500 mt-0.5">Last 7 days — green = logged in / visited, gray = absent</p>
+          </div>
+        </div>
+
+        <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto shadow-sm">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 border-b border-gray-200">
+              <tr>
+                <th className="text-left px-4 py-3 font-medium text-gray-600 min-w-[140px]">User</th>
+                {attendanceLoading
+                  ? Array(7).fill(null).map((_, i) => (
+                      <th key={i} className="px-3 py-3 text-center font-medium text-gray-400 min-w-[80px]">—</th>
+                    ))
+                  : attendance?.days.map((d) => (
+                      <th key={d.dateKey} className="px-3 py-3 text-center min-w-[80px]">
+                        <p className="font-semibold text-gray-700 text-xs">{d.dayName.slice(0, 3)}</p>
+                        <p className="text-gray-400 text-xs font-normal">{d.label.split(',')[0]}</p>
+                      </th>
+                    ))}
+                <th className="px-4 py-3 text-center font-medium text-gray-600">Active Days</th>
+              </tr>
+            </thead>
+            <tbody>
+              {attendanceLoading && (
+                <tr><td colSpan={9} className="text-center py-8 text-gray-400">Loading attendance...</td></tr>
+              )}
+              {!attendanceLoading && attendance?.users.length === 0 && (
+                <tr><td colSpan={9} className="text-center py-8 text-gray-400">No users found.</td></tr>
+              )}
+              {attendance?.users.map((u) => (
+                <tr key={u.userId} className="border-b border-gray-100 hover:bg-gray-50">
+                  <td className="px-4 py-3">
+                    <Link to={`/admin/users/${u.userId}`} className="font-medium text-brand-600 hover:underline text-sm">
+                      {u.name}
+                    </Link>
+                    <p className="text-xs text-gray-400">{u.email}</p>
+                    {!u.isActive && (
+                      <span className="text-xs text-gray-400 italic">Inactive</span>
+                    )}
+                  </td>
+                  {u.presence.map((present, idx) => (
+                    <td key={idx} className="px-3 py-3 text-center">
+                      <div className="flex justify-center">
+                        {present ? (
+                          <span className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center text-white text-xs font-bold shadow-sm">✓</span>
+                        ) : (
+                          <span className="w-8 h-8 rounded-full bg-gray-100 border border-gray-200 flex items-center justify-center text-gray-300 text-xs">–</span>
+                        )}
+                      </div>
+                    </td>
+                  ))}
+                  <td className="px-4 py-3 text-center">
+                    <span className={`text-sm font-bold ${
+                      u.activeDays >= 5 ? 'text-green-600' :
+                      u.activeDays >= 3 ? 'text-amber-600' : 'text-red-500'
+                    }`}>
+                      {u.activeDays}/7
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {/* Export */}
       <section>
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold text-gray-700">Export Lead Activity Report</h3>
           <div className="flex gap-2">
             {['excel', 'csv', 'pdf'].map((type) => (
-              <a
-                key={type}
-                href={reportsApi.exportUrl(type)}
-                className="text-xs font-medium px-3 py-1.5 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 uppercase"
-              >
+              <a key={type} href={reportsApi.exportUrl(type)}
+                className="text-xs font-medium px-3 py-1.5 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 uppercase">
                 {type}
               </a>
             ))}
@@ -45,9 +125,10 @@ export default function AdminReportsPage() {
         </div>
       </section>
 
+      {/* User Performance Table */}
       <section>
         <h3 className="text-sm font-semibold text-gray-700 mb-3">User Performance</h3>
-        <div className="bg-white border border-gray-200 rounded-lg overflow-x-auto">
+        <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto shadow-sm">
           <table className="w-full text-sm min-w-[640px]">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
@@ -65,11 +146,8 @@ export default function AdminReportsPage() {
               )}
               {performance?.map((u) => (
                 <tr key={u.userId} className="border-b border-gray-100">
-                  <td className="px-4 py-2.5 font-medium text-gray-800">
-                    <Link
-                      to={`/admin/users/${u.userId}`}
-                      className="text-brand-600 hover:underline"
-                    >
+                  <td className="px-4 py-2.5 font-medium">
+                    <Link to={`/admin/users/${u.userId}`} className="text-brand-600 hover:underline">
                       {u.name}
                     </Link>
                   </td>

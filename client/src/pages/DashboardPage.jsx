@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import gsap from 'gsap';
+import toast from 'react-hot-toast';
 import { Sparkles, Phone, CheckCircle2, AlarmClock, GitBranch } from 'lucide-react';
 import { dashboardApi, leadsApi } from '../api/endpoints';
 import { useAuthStore } from '../store/authStore';
@@ -22,6 +23,26 @@ export default function DashboardPage() {
     queryKey: ['user-stats'],
     queryFn: () => dashboardApi.userStats().then((r) => r.data),
   });
+
+  // Claim daily points on first dashboard visit of the day.
+  // Server handles dedup atomically via User.lastDailyPointsDate.
+  // useRef prevents StrictMode double-fire without blocking legitimate claims after DB reset.
+  const pointsClaimed = useRef(false);
+  useEffect(() => {
+    if (!user?._id || pointsClaimed.current) return;
+    pointsClaimed.current = true;
+
+    dashboardApi.claimDailyPoints()
+      .then(({ data }) => {
+        if (data.awarded) {
+          toast.success(`+${data.points} points! Keep it up 🔥`, { duration: 3000, icon: '⭐' });
+          queryClient.invalidateQueries({ queryKey: ['user-stats'] });
+        }
+      })
+      .catch(() => {
+        pointsClaimed.current = false; // allow retry on network error
+      });
+  }, [user?._id]); // eslint-disable-line
 
   const { data: dueLeads, isLoading: dueLoading } = useQuery({
     queryKey: ['due-today'],

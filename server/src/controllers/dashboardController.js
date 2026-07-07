@@ -157,4 +157,72 @@ const userDetail = asyncHandler(async (req, res) => {
   });
 });
 
-module.exports = { userStats, adminStats, userPerformance, userDetail };
+// Called by dashboard on every page load — awards 2 pts only on first visit of the day.
+// Works whether user just logged in OR was already logged in from a previous session.
+const claimDailyPoints = asyncHandler(async (req, res) => {
+  const { awardDailyLoginPoints } = require('../services/pointsEngine');
+  const result = await awardDailyLoginPoints(req.user._id);
+  res.json({
+    awarded: result !== null,
+    points: result ? result.points : 0,
+  });
+});
+
+// Weekly day-wise attendance for all users — uses PointsLedger daily_login entries
+// as the attendance proxy (one entry per user per day = they visited dashboard that day)
+const weeklyAttendance = asyncHandler(async (req, res) => {
+  const PointsLedger = require('../models/PointsLedger');
+
+  // Build last 7 days array (IST-aware)
+  const IST = 5.5 * 60 * 60 * 1000;
+  const days = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(Date.now() + IST - i * 24 * 60 * 60 * 1000);
+    const dayStart = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) - IST);
+    const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000 - 1);
+    days.push({
+      label: d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' }),
+      dayName: d.toLocaleDateString('en-IN', { weekday: 'long', timeZone: 'Asia/Kolkata' }),
+      dateKey: `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`,
+      start: dayStart,
+      end: dayEnd,
+    });
+  }
+
+  const users = await User.find({ role: 'user' }).select('name email isActive');
+  const weekStart = days[0].start;
+  const weekEnd = days[days.length - 1].end;
+
+  // Get all daily_login ledger entries for the week
+  const entries = await PointsLedger.find({
+    reason: 'daily_login',
+    createdAt: { $gte: weekStart, $lte: weekEnd },
+  });
+
+  // Map userId+dateKey → present
+  const attendanceMap = {};
+  entries.forEach((e) => {
+    const uid = String(e.userId);
+    const d = new Date(e.createdAt.getTime() + IST);
+    const dk = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+    if (!attendanceMap[uid]) attendanceMap[uid] = {};
+    attendanceMap[uid][dk] = true;
+  });
+
+  const result = users.map((u) => {
+    const uid = String(u._id);
+    const presence = days.map((d) => attendanceMap[uid]?.[d.dateKey] || false);
+    return {
+      userId: u._id,
+      name: u.name,
+      email: u.email,
+      isActive: u.isActive,
+      presence,
+      activeDays: presence.filter(Boolean).length,
+    };
+  });
+
+  res.json({ days: days.map((d) => ({ label: d.label, dayName: d.dayName, dateKey: d.dateKey })), users: result });
+});
+
+module.exports = { userStats, adminStats, userPerformance, userDetail, claimDailyPoints, weeklyAttendance };

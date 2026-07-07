@@ -28,8 +28,9 @@ const login = asyncHandler(async (req, res) => {
     return res.status(401).json({ message: 'Invalid credentials' });
   }
 
-  // Award daily login points (2 pts, first login of the day only)
-  await awardDailyLoginPoints(user._id);
+  // Points are no longer awarded on login.
+  // They are awarded when user first visits the dashboard for the day.
+  // This ensures already-logged-in users also get their daily points.
 
   const accessToken = generateAccessToken(user);
   const refreshToken = generateRefreshToken(user);

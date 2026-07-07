@@ -10,6 +10,7 @@ const userSchema = new mongoose.Schema(
     isActive: { type: Boolean, default: true },
     resetPasswordToken: { type: String, default: null },
     resetPasswordExpires: { type: Date, default: null },
+    lastDailyPointsDate: { type: String, default: null }, // YYYY-MM-DD IST — tracks when daily points last given
   },
   { timestamps: true }
 );
