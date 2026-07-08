@@ -10,13 +10,17 @@ const userStats = asyncHandler(async (req, res) => {
   const todayStart = startOfTodayIST();
   const todayEnd = endOfTodayIST();
 
-  const [totalLeads, talkedToday, closedFollowUps, dueNow, points] = await Promise.all([
+  const [totalLeads, talkedToday, closedFollowUps, dueNow, userDoc] = await Promise.all([
     Lead.countDocuments({ ownerId }),
     FollowUpLog.countDocuments({ authorId: ownerId, createdAt: { $gte: todayStart, $lte: todayEnd } }),
     Lead.countDocuments({ ownerId, isFollowUpClosed: true, currentStatus: { $in: ['order_placed', 'not_now'] } }),
     Lead.countDocuments({ ownerId, currentStatus: 'follow_up_later', nextFollowUpDate: { $lte: todayEnd } }),
-    getUserPointsSummary(ownerId, startOfMonthIST()),
+    User.findById(ownerId).select('totalPoints monthlyPoints lastPointsMonth'),
   ]);
+
+  // Auto-reset monthly if new month
+  const { getUserPointsSummary } = require('../services/pointsEngine');
+  const points = await getUserPointsSummary(ownerId);
 
   res.json({
     totalLeads,
@@ -52,18 +56,17 @@ const userPerformance = asyncHandler(async (req, res) => {
   if (to) dateFilter.$lte = new Date(to);
   const hasRange = Object.keys(dateFilter).length > 0;
 
-  const users = await User.find({ role: 'user' }).select('name email isActive');
+  const users = await User.find({ role: 'user' }).select('name email isActive totalPoints monthlyPoints lastPointsMonth');
 
   const results = await Promise.all(
     users.map(async (user) => {
       const leadFilter = { ownerId: user._id };
       if (hasRange) leadFilter.createdAt = dateFilter;
 
-      const [totalLeads, ordersPlaced, dueFollowUps, points] = await Promise.all([
+      const [totalLeads, ordersPlaced, dueFollowUps] = await Promise.all([
         Lead.countDocuments(leadFilter),
         Lead.countDocuments({ ...leadFilter, currentStatus: 'order_placed' }),
         Lead.countDocuments({ ownerId: user._id, currentStatus: 'follow_up_later' }),
-        getUserPointsSummary(user._id, startOfMonthIST()),
       ]);
 
       return {
@@ -74,8 +77,8 @@ const userPerformance = asyncHandler(async (req, res) => {
         totalLeads,
         ordersPlaced,
         dueFollowUps,
-        allTimePoints: points.allTimePoints,
-        monthlyPoints: points.monthlyPoints,
+        allTimePoints: user.totalPoints || 0,
+        monthlyPoints: user.monthlyPoints || 0,
       };
     })
   );
@@ -125,17 +128,15 @@ const userDetail = asyncHandler(async (req, res) => {
     .limit(50);
 
   // Stats
-  const [totalLeads, ordersPlaced, followUpsPending, followUpsClosed, newCustomers, todayTalked, points] = await Promise.all([
+  const [totalLeads, ordersPlaced, followUpsPending, followUpsClosed, newCustomers, todayTalked] = await Promise.all([
     Lead.countDocuments({ ownerId: userId }),
     Lead.countDocuments({ ownerId: userId, currentStatus: 'order_placed' }),
     Lead.countDocuments({ ownerId: userId, currentStatus: 'follow_up_later' }),
     Lead.countDocuments({ ownerId: userId, isFollowUpClosed: true }),
     Lead.countDocuments({ ownerId: userId, isNewCustomer: true }),
     FollowUpLog.countDocuments({ authorId: userId, createdAt: { $gte: new Date(new Date().setHours(0,0,0,0)) } }),
-    getUserPointsSummary(userId, startOfMonthIST()),
   ]);
 
-  // Unique customers this user has talked to
   const uniqueCustomerIds = [...new Set(leads.map((l) => String(l.customerId?._id)))];
 
   res.json({
@@ -149,8 +150,8 @@ const userDetail = asyncHandler(async (req, res) => {
       todayTalked,
       conversionRate: totalLeads > 0 ? ((ordersPlaced / totalLeads) * 100).toFixed(1) : '0.0',
       uniqueCustomers: uniqueCustomerIds.length,
-      allTimePoints: points.allTimePoints,
-      monthlyPoints: points.monthlyPoints,
+      allTimePoints: user.totalPoints || 0,
+      monthlyPoints: user.monthlyPoints || 0,
     },
     leads: leadsWithRemark,
     recentActivity,
@@ -189,7 +190,7 @@ const weeklyAttendance = asyncHandler(async (req, res) => {
     });
   }
 
-  const users = await User.find({ role: 'user' }).select('name email isActive');
+  const users = await User.find({ role: 'user' }).select('name email isActive totalPoints monthlyPoints lastPointsMonth');
   const weekStart = days[0].start;
   const weekEnd = days[days.length - 1].end;
 

@@ -1,4 +1,3 @@
-const PointsLedger = require('../models/PointsLedger');
 const User = require('../models/User');
 
 const DAILY_POINTS = 2;
@@ -9,55 +8,60 @@ function todayIST() {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
 }
 
-// Track via User.lastDailyPointsDate — completely independent of PointsLedger entries.
-// Atomic findOneAndUpdate ensures no race conditions.
+function thisMonthIST() {
+  const d = new Date(Date.now() + IST_OFFSET_MS);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
 async function awardDailyLoginPoints(userId) {
   const today = todayIST();
+  const thisMonth = thisMonthIST();
 
-  // First check — fast path
-  const user = await User.findById(userId).select('lastDailyPointsDate');
-  if (user?.lastDailyPointsDate === today) return null; // already got points today
+  // Check if already claimed today — fast read
+  const user = await User.findById(userId).select('lastDailyPointsDate lastPointsMonth');
+  if (user?.lastDailyPointsDate === today) return null;
 
-  // Update only if date is different — atomic
+  // New month — reset monthlyPoints
+  const isNewMonth = user?.lastPointsMonth !== thisMonth;
+
+  // Atomic update — only if date is still different
   const result = await User.findOneAndUpdate(
     { _id: userId, lastDailyPointsDate: { $ne: today } },
-    { $set: { lastDailyPointsDate: today } },
-    { new: true } // return the UPDATED document
+    {
+      $set: {
+        lastDailyPointsDate: today,
+        lastPointsMonth: thisMonth,
+        ...(isNewMonth ? { monthlyPoints: DAILY_POINTS } : {}),
+      },
+      $inc: {
+        totalPoints: DAILY_POINTS,
+        ...(isNewMonth ? {} : { monthlyPoints: DAILY_POINTS }),
+      },
+    },
+    { new: true }
   );
 
-  // If result is null OR result's date is NOT today → another concurrent request won the race
-  if (!result || result.lastDailyPointsDate !== today) return null;
-
-  // Successfully updated — create ledger entry
-  try {
-    await PointsLedger.create({
-      userId,
-      points: DAILY_POINTS,
-      reason: 'daily_login',
-      refId: null,
-    });
-  } catch {
-    // Not critical
-  }
+  if (!result) return null; // another request already claimed
 
   return { points: DAILY_POINTS };
 }
 
-async function getUserPointsSummary(userId, monthStart) {
-  const [allTime, monthly] = await Promise.all([
-    PointsLedger.aggregate([
-      { $match: { userId } },
-      { $group: { _id: null, total: { $sum: '$points' } } },
-    ]),
-    PointsLedger.aggregate([
-      { $match: { userId, createdAt: { $gte: monthStart } } },
-      { $group: { _id: null, total: { $sum: '$points' } } },
-    ]),
-  ]);
+async function getUserPointsSummary(userId) {
+  const user = await User.findById(userId).select('totalPoints monthlyPoints lastPointsMonth');
+  if (!user) return { allTimePoints: 0, monthlyPoints: 0 };
+
+  // Auto-reset monthly if new month
+  const thisMonth = thisMonthIST();
+  if (user.lastPointsMonth && user.lastPointsMonth !== thisMonth) {
+    await User.findByIdAndUpdate(userId, {
+      $set: { monthlyPoints: 0, lastPointsMonth: thisMonth }
+    });
+    return { allTimePoints: user.totalPoints, monthlyPoints: 0 };
+  }
 
   return {
-    allTimePoints: allTime[0]?.total || 0,
-    monthlyPoints: monthly[0]?.total || 0,
+    allTimePoints: user.totalPoints || 0,
+    monthlyPoints: user.monthlyPoints || 0,
   };
 }
 
