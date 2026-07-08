@@ -14,16 +14,21 @@ function todayIST() {
 async function awardDailyLoginPoints(userId) {
   const today = todayIST();
 
-  // Atomically check-and-update: only update if lastDailyPointsDate !== today
-  const updated = await User.findOneAndUpdate(
+  // First check — fast path
+  const user = await User.findById(userId).select('lastDailyPointsDate');
+  if (user?.lastDailyPointsDate === today) return null; // already got points today
+
+  // Update only if date is different — atomic
+  const result = await User.findOneAndUpdate(
     { _id: userId, lastDailyPointsDate: { $ne: today } },
     { $set: { lastDailyPointsDate: today } },
-    { new: false } // returns null if no doc matched (meaning already claimed today)
+    { new: true } // return the UPDATED document
   );
 
-  if (!updated) return null; // lastDailyPointsDate was already today — no points
+  // If result is null OR result's date is NOT today → another concurrent request won the race
+  if (!result || result.lastDailyPointsDate !== today) return null;
 
-  // User was updated — create the ledger entry for history/leaderboard
+  // Successfully updated — create ledger entry
   try {
     await PointsLedger.create({
       userId,
@@ -32,7 +37,7 @@ async function awardDailyLoginPoints(userId) {
       refId: null,
     });
   } catch {
-    // Ledger insert failed — not critical, points tracking via User field is already done
+    // Not critical
   }
 
   return { points: DAILY_POINTS };
