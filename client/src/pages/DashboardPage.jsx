@@ -37,7 +37,7 @@ export default function DashboardPage() {
         }
       })
       .catch(() => {}); // silent fail — non-critical
-  }, []); // eslint-disable-line
+  }, [user?._id]); // eslint-disable-line
 
   const { data: dueLeads, isLoading: dueLoading } = useQuery({
     queryKey: ['due-today'],
