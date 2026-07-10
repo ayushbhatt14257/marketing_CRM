@@ -25,13 +25,10 @@ export default function DashboardPage() {
   });
 
   // Claim daily points on first dashboard visit of the day.
-  // Server handles dedup atomically via User.lastDailyPointsDate.
-  // useRef prevents StrictMode double-fire without blocking legitimate claims after DB reset.
-  const pointsClaimed = useRef(false);
+  // Server is the single source of truth — User.lastDailyPointsDate prevents double-awards.
+  // No client-side guard needed; server handles all dedup atomically.
   useEffect(() => {
-    if (!user?._id || pointsClaimed.current) return;
-    pointsClaimed.current = true;
-
+    if (!user?._id) return;
     dashboardApi.claimDailyPoints()
       .then(({ data }) => {
         if (data.awarded) {
@@ -39,10 +36,8 @@ export default function DashboardPage() {
           queryClient.invalidateQueries({ queryKey: ['user-stats'] });
         }
       })
-      .catch(() => {
-        pointsClaimed.current = false; // allow retry on network error
-      });
-  }, [user?._id]); // eslint-disable-line
+      .catch(() => {}); // silent fail — non-critical
+  }, []); // eslint-disable-line
 
   const { data: dueLeads, isLoading: dueLoading } = useQuery({
     queryKey: ['due-today'],
