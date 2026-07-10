@@ -36,6 +36,7 @@ export const usersApi = {
   update: (id, payload) => apiClient.put(`/users/${id}`, payload),
   setActive: (id, isActive) => apiClient.put(`/users/${id}/active-status`, { isActive }),
   resetPassword: (id) => apiClient.put(`/users/${id}/reset-password`),
+  adjustPoints: (id, delta) => apiClient.put(`/users/${id}/adjust-points`, { delta }),
 };
 
 export const dashboardApi = {

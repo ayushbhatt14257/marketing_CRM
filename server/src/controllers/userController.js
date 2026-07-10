@@ -100,4 +100,29 @@ const resetUserPassword = asyncHandler(async (req, res) => {
   res.json({ message: 'Password reset', tempPassword });
 });
 
-module.exports = { listUsers, createUser, updateUser, setActiveStatus, resetUserPassword };
+
+
+const adjustUserPoints = asyncHandler(async (req, res) => {
+  const { delta } = req.body; // positive = add, negative = subtract
+  if (typeof delta !== 'number' || delta === 0) {
+    return res.status(400).json({ message: 'delta must be a non-zero number' });
+  }
+
+  const user = await User.findById(req.params.id);
+  if (!user) return res.status(404).json({ message: 'User not found' });
+
+  const { adjustPoints } = require('../services/pointsEngine');
+  const result = await adjustPoints(user._id, delta, 'admin_adjustment');
+
+  await require('../models/AuditLog').create({
+    userId: req.user._id,
+    action: `points.adjust.${delta > 0 ? 'increase' : 'decrease'}`,
+    entityType: 'User',
+    entityId: user._id,
+    diff: { delta, newTotal: result.totalPoints },
+  });
+
+  res.json({ message: `Points ${delta > 0 ? 'added' : 'removed'} successfully`, ...result });
+});
+
+module.exports = { listUsers, createUser, updateUser, setActiveStatus, resetUserPassword, adjustUserPoints };
