@@ -28,7 +28,9 @@ export default function DashboardPage() {
   // Server is the single source of truth — User.lastDailyPointsDate prevents double-awards.
   // No client-side guard needed; server handles all dedup atomically.
   useEffect(() => {
-    if (!user?._id) return;
+  const timer = setTimeout(() => {
+    const currentUser = useAuthStore.getState().user;
+    if (!currentUser?._id) return;
     dashboardApi.claimDailyPoints()
       .then(({ data }) => {
         if (data.awarded) {
@@ -36,8 +38,10 @@ export default function DashboardPage() {
           queryClient.invalidateQueries({ queryKey: ['user-stats'] });
         }
       })
-      .catch(() => {}); // silent fail — non-critical
-  }, [user?._id]); // eslint-disable-line
+      .catch(() => {});
+  }, 500);
+  return () => clearTimeout(timer);
+}, []); // eslint-disable-line
 
   const { data: dueLeads, isLoading: dueLoading } = useQuery({
     queryKey: ['due-today'],
