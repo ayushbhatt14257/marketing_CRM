@@ -12,6 +12,7 @@ export const leadsApi = {
   list: (params) => apiClient.get('/leads', { params }),
   dueToday: () => apiClient.get('/leads/due-today'),
   pipeline: () => apiClient.get('/leads/pipeline'),
+  byDay: (params) => apiClient.get('/leads/by-day', { params }),
   get: (id) => apiClient.get(`/leads/${id}`),
   create: (payload) => apiClient.post('/leads', payload),
   addFollowUp: (id, payload) => apiClient.post(`/leads/${id}/followups`, payload),
@@ -53,5 +54,6 @@ export const reportsApi = {
   productWise: () => apiClient.get('/reports/product-wise'),
   followUps: () => apiClient.get('/reports/followups'),
   orderConversion: () => apiClient.get('/reports/order-conversion'),
+  leadsByDay: (params) => apiClient.get('/reports/leads-by-day', { params }),
   exportUrl: (type) => `${apiClient.defaults.baseURL}/reports/export?type=${type}`,
 };

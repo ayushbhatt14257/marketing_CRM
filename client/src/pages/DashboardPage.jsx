@@ -25,23 +25,47 @@ export default function DashboardPage() {
   });
 
   // Claim daily points on first dashboard visit of the day.
-  // Server is the single source of truth — User.lastDailyPointsDate prevents double-awards.
-  // No client-side guard needed; server handles all dedup atomically.
+  // Server is the single source of truth (PointsLedger unique index prevents double-awards),
+  // so it's always safe to retry this — a duplicate call just gets `awarded: false` back.
+  // We retry on failure and re-attempt on visibilitychange (app foregrounded again), since a
+  // single silent failure — common on flaky mobile networks / iOS backgrounding a tab mid-request —
+  // used to mean points were simply missed for the whole day with no way to notice.
   useEffect(() => {
-  const timer = setTimeout(() => {
-    const currentUser = useAuthStore.getState().user;
-    if (!currentUser?._id) return;
-    dashboardApi.claimDailyPoints()
-      .then(({ data }) => {
-        if (data.awarded) {
-          toast.success(`+${data.points} points! Keep it up 🔥`, { duration: 3000, icon: '⭐' });
-          queryClient.invalidateQueries({ queryKey: ['user-stats'] });
-        }
-      })
-      .catch(() => {});
-  }, 500);
-  return () => clearTimeout(timer);
-}, []); // eslint-disable-line
+    let cancelled = false;
+
+    const claim = (attempt = 1) => {
+      const currentUser = useAuthStore.getState().user;
+      if (!currentUser?._id || cancelled) return;
+      dashboardApi.claimDailyPoints()
+        .then(({ data }) => {
+          if (cancelled) return;
+          if (data.awarded) {
+            toast.success(`+${data.points} points! Keep it up 🔥`, { duration: 3000, icon: '⭐' });
+            queryClient.invalidateQueries({ queryKey: ['user-stats'] });
+          }
+        })
+        .catch((err) => {
+          if (cancelled) return;
+          console.error('claim-daily-points failed:', err?.message || err);
+          if (attempt < 3) {
+            setTimeout(() => claim(attempt + 1), 2000 * attempt);
+          }
+        });
+    };
+
+    const timer = setTimeout(() => claim(), 500);
+
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') claim();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, []); // eslint-disable-line
 
   const { data: dueLeads, isLoading: dueLoading } = useQuery({
     queryKey: ['due-today'],

@@ -200,12 +200,17 @@ const weeklyAttendance = asyncHandler(async (req, res) => {
     createdAt: { $gte: weekStart, $lte: weekEnd },
   });
 
-  // Map userId+dateKey → present
+  // Map userId+dateKey → present.
+  // Prefer the stored dateKey (authoritative, set at write time); fall back to
+  // deriving it from createdAt for older entries written before dateKey existed.
   const attendanceMap = {};
   entries.forEach((e) => {
     const uid = String(e.userId);
-    const d = new Date(e.createdAt.getTime() + IST);
-    const dk = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+    let dk = e.dateKey;
+    if (!dk) {
+      const d = new Date(e.createdAt.getTime() + IST);
+      dk = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+    }
     if (!attendanceMap[uid]) attendanceMap[uid] = {};
     attendanceMap[uid][dk] = true;
   });

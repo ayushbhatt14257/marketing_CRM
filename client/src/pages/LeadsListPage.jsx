@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import { leadsApi } from '../api/endpoints';
 
 const STATUS_LABELS = {
@@ -22,12 +23,19 @@ export default function LeadsListPage() {
   const [status, setStatus] = useState('');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [showByDay, setShowByDay] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ['leads', range, status, search, page],
     queryFn: () =>
       leadsApi.list({ range: range || undefined, status: status || undefined, search: search || undefined, page })
         .then((r) => r.data),
+  });
+
+  const { data: byDay, isLoading: byDayLoading } = useQuery({
+    queryKey: ['leads-by-day'],
+    queryFn: () => leadsApi.byDay().then((r) => r.data.days),
+    enabled: showByDay,
   });
 
   return (
@@ -38,6 +46,46 @@ export default function LeadsListPage() {
           + Today's Work
         </Link>
       </div>
+
+      <button
+        type="button"
+        onClick={() => setShowByDay((v) => !v)}
+        className="flex items-center gap-1.5 text-sm font-medium text-brand-600 hover:text-brand-700 mb-3"
+      >
+        {showByDay ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+        {showByDay ? 'Hide' : 'Show'} day-wise breakdown
+      </button>
+
+      {showByDay && (
+        <div className="bg-white border border-gray-200 rounded-lg overflow-x-auto mb-5">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 border-b border-gray-200">
+              <tr>
+                <th className="text-left px-4 py-2.5 font-medium text-gray-600">Date</th>
+                <th className="text-left px-4 py-2.5 font-medium text-gray-600">Leads Entered</th>
+                <th className="text-left px-4 py-2.5 font-medium text-gray-600">Orders Placed</th>
+              </tr>
+            </thead>
+            <tbody>
+              {byDayLoading && (
+                <tr><td colSpan={3} className="text-center py-6 text-gray-400">Loading...</td></tr>
+              )}
+              {!byDayLoading && byDay?.length === 0 && (
+                <tr><td colSpan={3} className="text-center py-6 text-gray-400">No leads yet.</td></tr>
+              )}
+              {byDay?.map((d) => (
+                <tr key={d.date} className="border-b border-gray-100 hover:bg-gray-50">
+                  <td className="px-4 py-2.5 font-medium text-gray-800">
+                    {new Date(d.date).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' })}
+                  </td>
+                  <td className="px-4 py-2.5 text-gray-600">{d.count}</td>
+                  <td className="px-4 py-2.5 text-gray-600">{d.ordersPlaced}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-3 mb-4">
         <input

@@ -24,6 +24,11 @@ export default function AdminReportsPage() {
     queryFn: () => dashboardApi.weeklyAttendance().then((r) => r.data),
   });
 
+  const { data: byDay, isLoading: byDayLoading } = useQuery({
+    queryKey: ['leads-by-day-admin'],
+    queryFn: () => reportsApi.leadsByDay().then((r) => r.data.days),
+  });
+
   return (
     <div className="space-y-8">
       <h2 className="text-xl font-semibold text-gray-800">Reports & Analytics</h2>
@@ -103,6 +108,42 @@ export default function AdminReportsPage() {
                       {u.activeDays}/7
                     </span>
                   </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {/* Leads by Day */}
+      <section>
+        <div className="mb-3">
+          <h3 className="text-base font-semibold text-gray-800">Leads by Day</h3>
+          <p className="text-xs text-gray-500 mt-0.5">All leads across all users, grouped by the date they were entered (IST).</p>
+        </div>
+        <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto shadow-sm max-h-96 overflow-y-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 border-b border-gray-200 sticky top-0">
+              <tr>
+                <th className="text-left px-4 py-2.5 font-medium text-gray-600">Date</th>
+                <th className="text-left px-4 py-2.5 font-medium text-gray-600">Leads Entered</th>
+                <th className="text-left px-4 py-2.5 font-medium text-gray-600">Orders Placed</th>
+              </tr>
+            </thead>
+            <tbody>
+              {byDayLoading && (
+                <tr><td colSpan={3} className="text-center py-6 text-gray-400">Loading...</td></tr>
+              )}
+              {!byDayLoading && byDay?.length === 0 && (
+                <tr><td colSpan={3} className="text-center py-6 text-gray-400">No leads yet.</td></tr>
+              )}
+              {byDay?.map((d) => (
+                <tr key={d.date} className="border-b border-gray-100 hover:bg-gray-50">
+                  <td className="px-4 py-2.5 font-medium text-gray-800">
+                    {new Date(d.date).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' })}
+                  </td>
+                  <td className="px-4 py-2.5 text-gray-600">{d.count}</td>
+                  <td className="px-4 py-2.5 text-gray-600">{d.ordersPlaced}</td>
                 </tr>
               ))}
             </tbody>

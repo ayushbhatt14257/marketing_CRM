@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const ExcelJS = require('exceljs');
 const PDFDocument = require('pdfkit');
 const Lead = require('../models/Lead');
@@ -18,7 +19,7 @@ const leadActivityReport = asyncHandler(async (req, res) => {
   const filter = dateFilter ? { createdAt: dateFilter } : {};
 
   const leads = await Lead.find(filter)
-    .populate('customerId productId ownerId', 'name email')
+    .populate('customerId productIds ownerId', 'name email')
     .sort({ createdAt: -1 });
 
   res.json({ leads });
@@ -44,7 +45,7 @@ const productWiseReport = asyncHandler(async (req, res) => {
 
 const followUpReport = asyncHandler(async (req, res) => {
   const leads = await Lead.find({ currentStatus: 'follow_up_later' })
-    .populate('customerId productId ownerId', 'name email')
+    .populate('customerId productIds ownerId', 'name email')
     .sort({ nextFollowUpDate: 1 });
 
   res.json({ leads });
@@ -66,11 +67,11 @@ const orderConversionReport = asyncHandler(async (req, res) => {
 // Generic export endpoint: ?type=excel|csv|pdf&report=lead-activity (extend as needed)
 const exportReport = asyncHandler(async (req, res) => {
   const { type } = req.query;
-  const leads = await Lead.find({}).populate('customerId productId ownerId', 'name email').sort({ createdAt: -1 });
+  const leads = await Lead.find({}).populate('customerId productIds ownerId', 'name email').sort({ createdAt: -1 });
 
   const rows = leads.map((l) => ({
     customer: l.customerId?.name || '',
-    product: l.productId?.name || '',
+    product: (l.productIds || []).map((p) => p.name).join(', '),
     owner: l.ownerId?.name || '',
     status: l.currentStatus,
     nextFollowUpDate: l.nextFollowUpDate ? l.nextFollowUpDate.toISOString().slice(0, 10) : '',
@@ -122,4 +123,32 @@ const exportReport = asyncHandler(async (req, res) => {
   res.status(400).json({ message: 'Invalid export type. Use excel, csv, or pdf.' });
 });
 
-module.exports = { leadActivityReport, productWiseReport, followUpReport, orderConversionReport, exportReport };
+// Day-wise lead counts (admin view — optionally scoped to one user via ?userId=)
+// e.g. { date: '2026-07-07', count: 4, ordersPlaced: 1 }
+const leadsByDay = asyncHandler(async (req, res) => {
+  const { from, to, userId } = req.query;
+  const match = {};
+  if (userId) match.ownerId = new mongoose.Types.ObjectId(userId);
+  if (from || to) {
+    match.createdAt = {};
+    if (from) match.createdAt.$gte = new Date(from);
+    if (to) match.createdAt.$lte = new Date(to);
+  }
+
+  const days = await Lead.aggregate([
+    { $match: match },
+    {
+      $group: {
+        _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt', timezone: 'Asia/Kolkata' } },
+        count: { $sum: 1 },
+        ordersPlaced: { $sum: { $cond: [{ $eq: ['$currentStatus', 'order_placed'] }, 1, 0] } },
+      },
+    },
+    { $sort: { _id: -1 } },
+    { $project: { _id: 0, date: '$_id', count: 1, ordersPlaced: 1 } },
+  ]);
+
+  res.json({ days });
+});
+
+module.exports = { leadActivityReport, productWiseReport, followUpReport, orderConversionReport, exportReport, leadsByDay };

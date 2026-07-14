@@ -7,6 +7,7 @@ const {
   followUpReport,
   orderConversionReport,
   exportReport,
+  leadsByDay,
 } = require('../controllers/reportController');
 
 router.use(requireAuth, requireAdmin);
@@ -16,5 +17,6 @@ router.get('/product-wise', productWiseReport);
 router.get('/followups', followUpReport);
 router.get('/order-conversion', orderConversionReport);
 router.get('/export', exportReport);
+router.get('/leads-by-day', leadsByDay);
 
 module.exports = router;

@@ -205,8 +205,6 @@ const dueToday = asyncHandler(async (req, res) => {
   res.json({ leads });
 });
 
-module.exports = { createLead, addFollowUp, getLead, listLeads, dueToday };
-
 // All pending follow-ups for the user — sorted by date (overdue first, then upcoming)
 // Used by the dashboard "Follow-up Pipeline" section
 const followUpPipeline = asyncHandler(async (req, res) => {
@@ -235,4 +233,31 @@ const followUpPipeline = asyncHandler(async (req, res) => {
   res.json({ leads: tagged });
 });
 
-module.exports = { createLead, addFollowUp, getLead, listLeads, dueToday, followUpPipeline };
+// Day-wise breakdown of the logged-in user's own leads — e.g. { date: '2026-07-07', count: 4 }
+// Powers the "My Leads" date-wise view.
+const leadsByDayForUser = asyncHandler(async (req, res) => {
+  const { from, to } = req.query;
+  const match = { ownerId: req.user._id };
+  if (from || to) {
+    match.createdAt = {};
+    if (from) match.createdAt.$gte = new Date(from);
+    if (to) match.createdAt.$lte = new Date(to);
+  }
+
+  const days = await Lead.aggregate([
+    { $match: match },
+    {
+      $group: {
+        _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt', timezone: 'Asia/Kolkata' } },
+        count: { $sum: 1 },
+        ordersPlaced: { $sum: { $cond: [{ $eq: ['$currentStatus', 'order_placed'] }, 1, 0] } },
+      },
+    },
+    { $sort: { _id: -1 } },
+    { $project: { _id: 0, date: '$_id', count: 1, ordersPlaced: 1 } },
+  ]);
+
+  res.json({ days });
+});
+
+module.exports = { createLead, addFollowUp, getLead, listLeads, dueToday, followUpPipeline, leadsByDayForUser };

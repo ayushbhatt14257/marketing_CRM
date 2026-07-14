@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const User = require('../models/User');
 const PointsLedger = require('../models/PointsLedger');
 
@@ -14,49 +15,62 @@ function thisMonthIST() {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
 }
 
+// PointsLedger is now the single source of truth for "did this user claim today".
+// The unique (userId, dateKey, reason='daily_login') index on PointsLedger is what
+// actually prevents double-awarding, not the User.lastDailyPointsDate field (that is
+// now just a denormalized cache for quick reads). Ledger write and User update happen
+// inside one transaction, so the two can no longer drift the way they used to.
 async function awardDailyLoginPoints(userId) {
   const today = todayIST();
   const thisMonth = thisMonthIST();
 
-  // Fast check — already claimed today?
-  const user = await User.findById(userId).select('lastDailyPointsDate lastPointsMonth totalPoints monthlyPoints');
-  if (user?.lastDailyPointsDate === today) return null;
-
-  const isNewMonth = user?.lastPointsMonth !== thisMonth;
-
-  // Atomic update on User — only proceeds if date is still different
-  const result = await User.findOneAndUpdate(
-    { _id: userId, lastDailyPointsDate: { $ne: today } },
-    {
-      $set: {
-        lastDailyPointsDate: today,
-        lastPointsMonth: thisMonth,
-        ...(isNewMonth ? { monthlyPoints: DAILY_POINTS } : {}),
-      },
-      $inc: {
-        totalPoints: DAILY_POINTS,
-        ...(isNewMonth ? {} : { monthlyPoints: DAILY_POINTS }),
-      },
-    },
-    { new: true }
-  );
-
-  if (!result) return null; // race condition — another request already claimed
-
-  // ALSO create PointsLedger entry — this is what attendance tracking reads
+  const session = await mongoose.startSession();
   try {
-    await PointsLedger.create({
-      userId,
-      points: DAILY_POINTS,
-      reason: 'daily_login',
-      refId: null,
-    });
-  } catch (err) {
-    // Non-critical — User.totalPoints is already updated above
-    console.error('PointsLedger insert failed:', err.message);
-  }
+    let awarded = false;
 
-  return { points: DAILY_POINTS };
+    await session.withTransaction(async () => {
+      try {
+        await PointsLedger.create([{
+          userId,
+          points: DAILY_POINTS,
+          reason: 'daily_login',
+          refId: null,
+          dateKey: today,
+        }], { session });
+      } catch (err) {
+        if (err.code === 11000) {
+          awarded = false; // already claimed today — not an error
+          return;
+        }
+        throw err;
+      }
+
+      const user = await User.findById(userId).select('lastPointsMonth').session(session);
+      const isNewMonth = user?.lastPointsMonth !== thisMonth;
+
+      await User.findByIdAndUpdate(
+        userId,
+        {
+          $set: {
+            lastDailyPointsDate: today,
+            lastPointsMonth: thisMonth,
+            ...(isNewMonth ? { monthlyPoints: DAILY_POINTS } : {}),
+          },
+          $inc: {
+            totalPoints: DAILY_POINTS,
+            ...(isNewMonth ? {} : { monthlyPoints: DAILY_POINTS }),
+          },
+        },
+        { session }
+      );
+
+      awarded = true;
+    });
+
+    return awarded ? { points: DAILY_POINTS } : null;
+  } finally {
+    session.endSession();
+  }
 }
 
 async function adjustPoints(userId, delta, reason = 'admin_adjustment') {
