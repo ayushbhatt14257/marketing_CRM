@@ -35,7 +35,11 @@ export default function DashboardPage() {
 
     const claim = (attempt = 1) => {
       const currentUser = useAuthStore.getState().user;
-      if (!currentUser?._id || cancelled) return;
+      // Login/session storage uses `id` (see authController's login response); the
+      // full user doc from other endpoints uses `_id`. Accept either so this doesn't
+      // silently no-op depending on which code path populated the store.
+      const uid = currentUser?.id || currentUser?._id;
+      if (!uid || cancelled) return;
       dashboardApi.claimDailyPoints()
         .then(({ data }) => {
           if (cancelled) return;
