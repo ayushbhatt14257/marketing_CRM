@@ -20,9 +20,14 @@ const pointsLedgerSchema = new mongoose.Schema(
 pointsLedgerSchema.index({ userId: 1, createdAt: -1 });
 // One daily_login entry per user per IST day — DB-level guarantee against double-award,
 // and the attendance query can now match on dateKey directly instead of re-deriving it.
+// IMPORTANT: the partial filter requires dateKey to actually be a string. Older entries
+// written before this field existed have no dateKey at all, and Mongo treats "missing"
+// as null for indexing — without this type check, every user's pile of old null-dateKey
+// daily_login entries collides with itself and the index build fails silently, leaving
+// NO duplicate protection in place at all.
 pointsLedgerSchema.index(
   { userId: 1, dateKey: 1, reason: 1 },
-  { unique: true, partialFilterExpression: { reason: 'daily_login' } }
+  { unique: true, partialFilterExpression: { reason: 'daily_login', dateKey: { $type: 'string' } } }
 );
 
 module.exports = mongoose.model('PointsLedger', pointsLedgerSchema);
