@@ -31,10 +31,21 @@ const listAllCustomers = asyncHandler(async (req, res) => {
       },
     },
     {
+      $lookup: {
+        from: 'users',
+        localField: 'createdBy',
+        foreignField: '_id',
+        as: 'addedByUser',
+      },
+    },
+    { $unwind: { path: '$addedByUser', preserveNullAndEmptyArrays: true } },
+    {
       $project: {
         name: 1,
         createdAt: 1,
         leadCount: { $size: '$leads' },
+        addedById: '$createdBy',
+        addedByName: { $ifNull: ['$addedByUser.name', 'Unknown'] },
       },
     },
     { $sort: { name: 1 } },
