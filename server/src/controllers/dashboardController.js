@@ -63,10 +63,22 @@ const userPerformance = asyncHandler(async (req, res) => {
       const leadFilter = { ownerId: user._id };
       if (hasRange) leadFilter.createdAt = dateFilter;
 
-      const [totalLeads, ordersPlaced, dueFollowUps] = await Promise.all([
+      const [totalLeads, ordersPlaced, dueFollowUps, lowDaysAgg] = await Promise.all([
         Lead.countDocuments(leadFilter),
         Lead.countDocuments({ ...leadFilter, currentStatus: 'order_placed' }),
         Lead.countDocuments({ ownerId: user._id, currentStatus: 'follow_up_later' }),
+        // Days this user worked (entered >=1 lead) but stayed under the 7-leads/day target.
+        Lead.aggregate([
+          { $match: leadFilter },
+          {
+            $group: {
+              _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt', timezone: 'Asia/Kolkata' } },
+              count: { $sum: 1 },
+            },
+          },
+          { $match: { count: { $lt: 7 } } },
+          { $count: 'days' },
+        ]),
       ]);
 
       return {
@@ -77,6 +89,7 @@ const userPerformance = asyncHandler(async (req, res) => {
         totalLeads,
         ordersPlaced,
         dueFollowUps,
+        lowLeadDays: lowDaysAgg[0]?.days || 0,
         allTimePoints: user.totalPoints || 0,
         monthlyPoints: user.monthlyPoints || 0,
       };

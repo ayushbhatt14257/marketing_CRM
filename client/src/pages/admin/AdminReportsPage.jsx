@@ -177,13 +177,14 @@ export default function AdminReportsPage() {
                 <th className="text-left px-4 py-2.5 font-medium text-gray-600">Total Leads</th>
                 <th className="text-left px-4 py-2.5 font-medium text-gray-600">Orders Placed</th>
                 <th className="text-left px-4 py-2.5 font-medium text-gray-600">Due Follow-ups</th>
+                <th className="text-left px-4 py-2.5 font-medium text-gray-600" title="Days this user worked but entered fewer than 7 leads">Days &lt;7 Leads</th>
                 <th className="text-left px-4 py-2.5 font-medium text-gray-600">Points (All-time)</th>
                 <th className="text-left px-4 py-2.5 font-medium text-gray-600">Points (Month)</th>
               </tr>
             </thead>
             <tbody>
               {perfLoading && (
-                <tr><td colSpan={6} className="text-center py-6 text-gray-400">Loading...</td></tr>
+                <tr><td colSpan={7} className="text-center py-6 text-gray-400">Loading...</td></tr>
               )}
               {performance?.map((u) => (
                 <tr key={u.userId} className="border-b border-gray-100">
@@ -195,6 +196,7 @@ export default function AdminReportsPage() {
                   <td className="px-4 py-2.5 text-gray-600">{u.totalLeads}</td>
                   <td className="px-4 py-2.5 text-gray-600">{u.ordersPlaced}</td>
                   <td className="px-4 py-2.5 text-gray-600">{u.dueFollowUps}</td>
+                  <td className={`px-4 py-2.5 font-medium ${u.lowLeadDays > 0 ? 'text-amber-600' : 'text-gray-600'}`}>{u.lowLeadDays}</td>
                   <td className="px-4 py-2.5 text-gray-600">{u.allTimePoints}</td>
                   <td className="px-4 py-2.5 text-gray-600">{u.monthlyPoints}</td>
                 </tr>
