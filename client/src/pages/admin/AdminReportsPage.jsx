@@ -196,6 +196,7 @@ export default function AdminReportsPage() {
               type="month"
               value={perfMonth || ''}
               onChange={(e) => setPerfMonth(e.target.value || getCurrentISTMonth())}
+              onWheel={(e) => e.target.blur()}
               className="text-xs border border-gray-300 rounded-md px-2 py-1.5 text-gray-700"
             />
             {perfMonth !== null && (
@@ -218,7 +219,7 @@ export default function AdminReportsPage() {
         </div>
         <p className="text-xs text-gray-500 mb-3">
           {perfMonth
-            ? `Showing data for ${new Date(`${perfMonth}-01`).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}. Leads, orders, and "Days <7 Leads" reset each month — points columns are always all-time / this-month regardless of this filter.`
+            ? `Showing data for ${new Date(`${perfMonth}-01`).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })} — leads, orders, "Days <7 Leads", and points all reflect this month only.`
             : 'Showing all-time data — no month filter applied.'}
         </p>
         <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto shadow-sm">
@@ -231,7 +232,11 @@ export default function AdminReportsPage() {
                 <th className="text-left px-4 py-2.5 font-medium text-gray-600">Due Follow-ups</th>
                 <th className="text-left px-4 py-2.5 font-medium text-gray-600" title="Days this user worked but entered fewer than 7 leads">Days &lt;7 Leads</th>
                 <th className="text-left px-4 py-2.5 font-medium text-gray-600">Points (All-time)</th>
-                <th className="text-left px-4 py-2.5 font-medium text-gray-600">Points (Month)</th>
+                <th className="text-left px-4 py-2.5 font-medium text-gray-600">
+                  {perfMonth
+                    ? `Points (${new Date(`${perfMonth}-01`).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })})`
+                    : 'Points (This Month)'}
+                </th>
               </tr>
             </thead>
             <tbody>

@@ -1,6 +1,7 @@
 const Lead = require('../models/Lead');
 const FollowUpLog = require('../models/FollowUpLog');
 const User = require('../models/User');
+const PointsLedger = require('../models/PointsLedger');
 const { getUserPointsSummary } = require('../services/pointsEngine');
 const { startOfTodayIST, endOfTodayIST, startOfMonthIST } = require('../utils/dateHelpers');
 const asyncHandler = require('../utils/asyncHandler');
@@ -58,6 +59,20 @@ const userPerformance = asyncHandler(async (req, res) => {
 
   const users = await User.find({ role: 'user' }).select('name email isActive totalPoints monthlyPoints lastPointsMonth');
 
+  // When a specific period is selected, points for that period come straight from the
+  // ledger (the real source of truth) rather than the live monthlyPoints cache — that
+  // cache only ever reflects the *current* month, so it can't answer "how many points
+  // did this user earn in August" once August is over. One grouped query for everyone,
+  // rather than per-user, to keep this cheap.
+  let periodPointsByUser = {};
+  if (hasRange) {
+    const agg = await PointsLedger.aggregate([
+      { $match: { createdAt: dateFilter } },
+      { $group: { _id: '$userId', total: { $sum: '$points' } } },
+    ]);
+    agg.forEach((r) => { periodPointsByUser[String(r._id)] = r.total; });
+  }
+
   const results = await Promise.all(
     users.map(async (user) => {
       const leadFilter = { ownerId: user._id };
@@ -91,7 +106,7 @@ const userPerformance = asyncHandler(async (req, res) => {
         dueFollowUps,
         lowLeadDays: lowDaysAgg[0]?.days || 0,
         allTimePoints: user.totalPoints || 0,
-        monthlyPoints: user.monthlyPoints || 0,
+        monthlyPoints: hasRange ? (periodPointsByUser[String(user._id)] || 0) : (user.monthlyPoints || 0),
       };
     })
   );
