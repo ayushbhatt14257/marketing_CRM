@@ -1,8 +1,7 @@
-import { useEffect, useRef } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useRef } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import gsap from 'gsap';
-import toast from 'react-hot-toast';
 import { Sparkles, Phone, CheckCircle2, AlarmClock, GitBranch } from 'lucide-react';
 import { dashboardApi, leadsApi } from '../api/endpoints';
 import { useAuthStore } from '../store/authStore';
@@ -14,7 +13,6 @@ import NewFeaturePopup from '../components/NewFeaturePopup';
 
 export default function DashboardPage() {
   const user = useAuthStore((s) => s.user);
-  const queryClient = useQueryClient();
   const heroRef = useRef(null);
   const progressBarRef = useRef(null);
   const dueSectionRef = useRef(null);
@@ -24,52 +22,8 @@ export default function DashboardPage() {
     queryFn: () => dashboardApi.userStats().then((r) => r.data),
   });
 
-  // Claim daily points on first dashboard visit of the day.
-  // Server is the single source of truth (PointsLedger unique index prevents double-awards),
-  // so it's always safe to retry this — a duplicate call just gets `awarded: false` back.
-  // We retry on failure and re-attempt on visibilitychange (app foregrounded again), since a
-  // single silent failure — common on flaky mobile networks / iOS backgrounding a tab mid-request —
-  // used to mean points were simply missed for the whole day with no way to notice.
-  useEffect(() => {
-    let cancelled = false;
-
-    const claim = (attempt = 1) => {
-      const currentUser = useAuthStore.getState().user;
-      // Login/session storage uses `id` (see authController's login response); the
-      // full user doc from other endpoints uses `_id`. Accept either so this doesn't
-      // silently no-op depending on which code path populated the store.
-      const uid = currentUser?.id || currentUser?._id;
-      if (!uid || cancelled) return;
-      dashboardApi.claimDailyPoints()
-        .then(({ data }) => {
-          if (cancelled) return;
-          if (data.awarded) {
-            toast.success(`+${data.points} points! Keep it up 🔥`, { duration: 3000, icon: '⭐' });
-            queryClient.invalidateQueries({ queryKey: ['user-stats'] });
-          }
-        })
-        .catch((err) => {
-          if (cancelled) return;
-          console.error('claim-daily-points failed:', err?.message || err);
-          if (attempt < 3) {
-            setTimeout(() => claim(attempt + 1), 2000 * attempt);
-          }
-        });
-    };
-
-    const timer = setTimeout(() => claim(), 500);
-
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') claim();
-    };
-    document.addEventListener('visibilitychange', onVisible);
-
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-      document.removeEventListener('visibilitychange', onVisible);
-    };
-  }, []); // eslint-disable-line
+  // Daily points are claimed from AppLayout now (fires on any authenticated page,
+  // not just this one) — see AppLayout.jsx.
 
   const { data: dueLeads, isLoading: dueLoading } = useQuery({
     queryKey: ['due-today'],

@@ -1,6 +1,7 @@
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
+import toast from 'react-hot-toast';
 import {
   LayoutDashboard, List, PlusCircle, Users, Package,
   Contact, FileBarChart, LogOut, Menu, X,
@@ -37,6 +38,7 @@ export default function AppLayout() {
   const logout = useAuthStore((s) => s.logout);
   const navigate = useNavigate();
   const location = useLocation();
+  const queryClient = useQueryClient();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const { data: stats } = useQuery({
@@ -44,6 +46,49 @@ export default function AppLayout() {
     queryFn: () => dashboardApi.userStats().then((r) => r.data),
     enabled: user?.role !== 'admin',
   });
+
+  // Claim daily points as soon as ANY authenticated page loads — not just the Dashboard.
+  // Lives here (in the layout every page renders inside) rather than in DashboardPage,
+  // so someone who lands straight on "Today's Work" or "My Leads" still gets credited.
+  // Fires once the session is *confirmed* valid (user-stats succeeded) rather than a
+  // blind timer, since that's what caused the "only works after a refresh" bug before.
+  useEffect(() => {
+    if (user?.role === 'admin' || !stats) return;
+    let cancelled = false;
+
+    const claim = (attempt = 1) => {
+      const currentUser = useAuthStore.getState().user;
+      const uid = currentUser?.id || currentUser?._id;
+      if (!uid || cancelled) return;
+      dashboardApi.claimDailyPoints()
+        .then(({ data }) => {
+          if (cancelled) return;
+          if (data.awarded) {
+            toast.success(`+${data.points} points! Keep it up 🔥`, { duration: 3000, icon: '⭐' });
+            queryClient.invalidateQueries({ queryKey: ['user-stats'] });
+          }
+        })
+        .catch((err) => {
+          if (cancelled) return;
+          console.error('claim-daily-points failed:', err?.message || err);
+          if (attempt < 3) {
+            setTimeout(() => claim(attempt + 1), 2000 * attempt);
+          }
+        });
+    };
+
+    claim();
+
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') claim();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+
+    return () => {
+      cancelled = true;
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [stats, user?.role, queryClient]); // eslint-disable-line
 
   const links = user?.role === 'admin' ? [...userLinks, ...adminLinks] : userLinks;
 
