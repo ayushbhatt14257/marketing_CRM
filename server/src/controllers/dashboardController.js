@@ -49,6 +49,16 @@ const adminStats = asyncHandler(async (req, res) => {
   res.json({ totalUsers, activeUsers, totalLeads, dueToday, ordersPlaced, pendingFollowUps, closedFollowUps });
 });
 
+const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+function currentMonthRangeIST() {
+  const now = new Date(Date.now() + IST_OFFSET_MS);
+  const y = now.getUTCFullYear();
+  const m = now.getUTCMonth();
+  const from = new Date(Date.UTC(y, m, 1) - IST_OFFSET_MS);
+  const to = new Date(Date.UTC(y, m + 1, 1) - IST_OFFSET_MS - 1);
+  return { $gte: from, $lte: to };
+}
+
 // Per-user performance breakdown for admin (used by the User Performance Monitoring screen)
 const userPerformance = asyncHandler(async (req, res) => {
   const { from, to } = req.query;
@@ -59,19 +69,19 @@ const userPerformance = asyncHandler(async (req, res) => {
 
   const users = await User.find({ role: 'user' }).select('name email isActive totalPoints monthlyPoints lastPointsMonth');
 
-  // When a specific period is selected, points for that period come straight from the
-  // ledger (the real source of truth) rather than the live monthlyPoints cache — that
-  // cache only ever reflects the *current* month, so it can't answer "how many points
-  // did this user earn in August" once August is over. One grouped query for everyone,
-  // rather than per-user, to keep this cheap.
-  let periodPointsByUser = {};
-  if (hasRange) {
-    const agg = await PointsLedger.aggregate([
-      { $match: { createdAt: dateFilter } },
-      { $group: { _id: '$userId', total: { $sum: '$points' } } },
-    ]);
-    agg.forEach((r) => { periodPointsByUser[String(r._id)] = r.total; });
-  }
+  // Points for the displayed period ALWAYS come from the ledger (the real source of
+  // truth) — never the live monthlyPoints cache. That cache can drift from the ledger
+  // after manual corrections (admin point adjustments, historical backfills, etc.), and
+  // relying on it here for "this month" while the filtered view used the ledger for
+  // "selected month" is exactly what made the two disagree. Using the ledger in both
+  // places means they can never show different numbers for the same month again.
+  const periodFilter = hasRange ? dateFilter : currentMonthRangeIST();
+  const agg = await PointsLedger.aggregate([
+    { $match: { createdAt: periodFilter } },
+    { $group: { _id: '$userId', total: { $sum: '$points' } } },
+  ]);
+  const periodPointsByUser = {};
+  agg.forEach((r) => { periodPointsByUser[String(r._id)] = r.total; });
 
   const results = await Promise.all(
     users.map(async (user) => {
@@ -106,7 +116,7 @@ const userPerformance = asyncHandler(async (req, res) => {
         dueFollowUps,
         lowLeadDays: lowDaysAgg[0]?.days || 0,
         allTimePoints: user.totalPoints || 0,
-        monthlyPoints: hasRange ? (periodPointsByUser[String(user._id)] || 0) : (user.monthlyPoints || 0),
+        monthlyPoints: periodPointsByUser[String(user._id)] || 0,
       };
     })
   );
