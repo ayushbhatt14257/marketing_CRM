@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { dashboardApi, reportsApi } from '../../api/endpoints';
@@ -8,15 +9,35 @@ const DAY_COLORS = {
   false: 'bg-gray-200',
 };
 
+const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+
+function getCurrentISTMonth() {
+  const d = new Date(Date.now() + IST_OFFSET_MS);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
+// Converts a 'YYYY-MM' month string into IST month-start/month-end ISO bounds.
+function monthRangeIST(monthStr) {
+  const [y, m] = monthStr.split('-').map(Number);
+  const from = new Date(`${monthStr}-01T00:00:00+05:30`);
+  const nextMonth = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
+  const to = new Date(new Date(`${nextMonth}-01T00:00:00+05:30`).getTime() - 1);
+  return { from: from.toISOString(), to: to.toISOString() };
+}
+
 export default function AdminReportsPage() {
   const { data: adminStats, isLoading: statsLoading } = useQuery({
     queryKey: ['admin-stats'],
     queryFn: () => dashboardApi.adminStats().then((r) => r.data),
   });
 
+  // null = "All Time" (no filter). Defaults to the current IST month.
+  const [perfMonth, setPerfMonth] = useState(getCurrentISTMonth());
+  const perfRange = perfMonth ? monthRangeIST(perfMonth) : null;
+
   const { data: performance, isLoading: perfLoading } = useQuery({
-    queryKey: ['user-performance'],
-    queryFn: () => dashboardApi.userPerformance().then((r) => r.data.users),
+    queryKey: ['user-performance', perfMonth],
+    queryFn: () => dashboardApi.userPerformance(perfRange || undefined).then((r) => r.data.users),
   });
 
   const { data: attendance, isLoading: attendanceLoading } = useQuery({
@@ -168,7 +189,38 @@ export default function AdminReportsPage() {
 
       {/* User Performance Table */}
       <section>
-        <h3 className="text-sm font-semibold text-gray-700 mb-3">User Performance</h3>
+        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+          <h3 className="text-sm font-semibold text-gray-700">User Performance</h3>
+          <div className="flex items-center gap-2">
+            <input
+              type="month"
+              value={perfMonth || ''}
+              onChange={(e) => setPerfMonth(e.target.value || getCurrentISTMonth())}
+              className="text-xs border border-gray-300 rounded-md px-2 py-1.5 text-gray-700"
+            />
+            {perfMonth !== null && (
+              <button
+                onClick={() => setPerfMonth(null)}
+                className="text-xs font-medium px-3 py-1.5 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
+              >
+                Remove filter (All Time)
+              </button>
+            )}
+            {perfMonth === null && (
+              <button
+                onClick={() => setPerfMonth(getCurrentISTMonth())}
+                className="text-xs font-medium px-3 py-1.5 rounded-md border border-brand-300 text-brand-600 hover:bg-brand-50"
+              >
+                Back to this month
+              </button>
+            )}
+          </div>
+        </div>
+        <p className="text-xs text-gray-500 mb-3">
+          {perfMonth
+            ? `Showing data for ${new Date(`${perfMonth}-01`).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}. Leads, orders, and "Days <7 Leads" reset each month — points columns are always all-time / this-month regardless of this filter.`
+            : 'Showing all-time data — no month filter applied.'}
+        </p>
         <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto shadow-sm">
           <table className="w-full text-sm min-w-[640px]">
             <thead className="bg-gray-50 border-b border-gray-200">
