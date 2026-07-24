@@ -1,5 +1,5 @@
-import { useRef } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useEffect, useRef } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import gsap from 'gsap';
 import { Sparkles, Phone, CheckCircle2, AlarmClock, GitBranch } from 'lucide-react';
@@ -13,6 +13,7 @@ import NewFeaturePopup from '../components/NewFeaturePopup';
 
 export default function DashboardPage() {
   const user = useAuthStore((s) => s.user);
+  const queryClient = useQueryClient();
   const heroRef = useRef(null);
   const progressBarRef = useRef(null);
   const dueSectionRef = useRef(null);
