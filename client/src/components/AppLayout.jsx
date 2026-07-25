@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import {
   LayoutDashboard, List, PlusCircle, Users, Package,
   Contact, FileBarChart, LogOut, Menu, X,
-  UserCheck, KeyRound
+  UserCheck, KeyRound, FileSearch
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { authApi, dashboardApi } from '../api/endpoints';
@@ -30,6 +30,7 @@ const adminLinks = [
   { to: '/admin/users', label: 'Users', icon: Users },
   { to: '/admin/products', label: 'Products', icon: Package },
   { to: '/admin/customers', label: 'Customers', icon: Contact },
+  { to: '/admin/book-match', label: 'Book Match', icon: FileSearch },
   { to: '/admin/reports', label: 'Reports', icon: FileBarChart },
 ];
 

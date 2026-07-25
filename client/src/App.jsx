@@ -17,6 +17,7 @@ import ChangePasswordPage from './pages/ChangePasswordPage';
 import AdminUsersPage from './pages/admin/AdminUsersPage';
 import AdminProductsPage from './pages/admin/AdminProductsPage';
 import AdminCustomersPage from './pages/admin/AdminCustomersPage';
+import AdminBookMatchPage from './pages/admin/AdminBookMatchPage';
 import AdminReportsPage from './pages/admin/AdminReportsPage';
 import AdminUserDetailPage from './pages/admin/AdminUserDetailPage';
 import AdminAssignLeadPage from './pages/admin/AdminAssignLeadPage';
@@ -90,6 +91,7 @@ export default function App() {
               <Route path="/admin/users/:id" element={<AdminUserDetailPage />} />
               <Route path="/admin/products" element={<AdminProductsPage />} />
               <Route path="/admin/customers" element={<AdminCustomersPage />} />
+              <Route path="/admin/book-match" element={<AdminBookMatchPage />} />
               <Route path="/admin/reports" element={<AdminReportsPage />} />
             </Route>
           </Route>

@@ -40,6 +40,17 @@ export const usersApi = {
   adjustPoints: (id, delta) => apiClient.put(`/users/${id}/adjust-points`, { delta }),
 };
 
+export const bookMatchApi = {
+  parseSheet: (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return apiClient.post('/book-match/parse', formData);
+  },
+  matchParties: (userId, entries) => apiClient.post('/book-match/match', { userId, entries }),
+  exportReport: (rows, targetUserName) =>
+    apiClient.post('/book-match/export', { rows, targetUserName }, { responseType: 'blob' }),
+};
+
 export const dashboardApi = {
   userStats: () => apiClient.get('/dashboard/user-stats'),
   adminStats: () => apiClient.get('/dashboard/admin-stats'),
