@@ -22,6 +22,11 @@ const leadSchema = new mongoose.Schema(
 
 leadSchema.index({ ownerId: 1, nextFollowUpDate: 1 });
 leadSchema.index({ ownerId: 1, currentStatus: 1 });
+// Powers the Customers page and Book Match feature, which both look up "how many
+// leads does this customer have" for every customer — was an unindexed full scan.
+leadSchema.index({ customerId: 1 });
+// Powers day-wise/date-range reports across all leads (Leads by Day, exports).
+leadSchema.index({ createdAt: -1 });
 
 leadSchema.statics.STATUSES = LEAD_STATUSES;
 

@@ -20,7 +20,8 @@ const leadActivityReport = asyncHandler(async (req, res) => {
 
   const leads = await Lead.find(filter)
     .populate('customerId productIds ownerId', 'name email')
-    .sort({ createdAt: -1 });
+    .sort({ createdAt: -1 })
+    .lean();
 
   res.json({ leads });
 });
@@ -46,7 +47,8 @@ const productWiseReport = asyncHandler(async (req, res) => {
 const followUpReport = asyncHandler(async (req, res) => {
   const leads = await Lead.find({ currentStatus: 'follow_up_later' })
     .populate('customerId productIds ownerId', 'name email')
-    .sort({ nextFollowUpDate: 1 });
+    .sort({ nextFollowUpDate: 1 })
+    .lean();
 
   res.json({ leads });
 });
@@ -67,7 +69,7 @@ const orderConversionReport = asyncHandler(async (req, res) => {
 // Generic export endpoint: ?type=excel|csv|pdf&report=lead-activity (extend as needed)
 const exportReport = asyncHandler(async (req, res) => {
   const { type } = req.query;
-  const leads = await Lead.find({}).populate('customerId productIds ownerId', 'name email').sort({ createdAt: -1 });
+  const leads = await Lead.find({}).populate('customerId productIds ownerId', 'name email').sort({ createdAt: -1 }).lean();
 
   const rows = leads.map((l) => ({
     customer: l.customerId?.name || '',

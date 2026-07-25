@@ -85,7 +85,7 @@ const createLead = asyncHandler(async (req, res) => {
     diff: assignTo ? { assignedTo: assignTo } : null,
   });
 
-  const populated = await Lead.findById(lead._id).populate('customerId productIds');
+  const populated = await Lead.findById(lead._id).populate('customerId productIds').lean();
   res.status(201).json({ lead: populated });
 });
 
@@ -129,18 +129,18 @@ const addFollowUp = asyncHandler(async (req, res) => {
     entityId: lead._id,
   });
 
-  const populated = await Lead.findById(lead._id).populate('customerId productIds');
+  const populated = await Lead.findById(lead._id).populate('customerId productIds').lean();
   res.json({ lead: populated });
 });
 
 const getLead = asyncHandler(async (req, res) => {
-  const lead = await Lead.findById(req.params.id).populate('customerId productIds ownerId', 'name email');
+  const lead = await Lead.findById(req.params.id).populate('customerId productIds ownerId', 'name email').lean();
   if (!lead) return res.status(404).json({ message: 'Lead not found' });
   if (String(lead.ownerId._id || lead.ownerId) !== String(req.user._id) && req.user.role !== 'admin') {
     return res.status(403).json({ message: 'Not authorized to view this lead' });
   }
 
-  const history = await FollowUpLog.find({ leadId: lead._id }).populate('authorId', 'name').sort({ createdAt: -1 });
+  const history = await FollowUpLog.find({ leadId: lead._id }).populate('authorId', 'name').sort({ createdAt: -1 }).lean();
   res.json({ lead, history });
 });
 
@@ -170,7 +170,7 @@ const listLeads = asyncHandler(async (req, res) => {
   const skip = (Number(page) - 1) * Number(limit);
 
   const [leads, total] = await Promise.all([
-    Lead.find(filter).populate('customerId productIds').sort({ updatedAt: -1 }).skip(skip).limit(Number(limit)),
+    Lead.find(filter).populate('customerId productIds').sort({ updatedAt: -1 }).skip(skip).limit(Number(limit)).lean(),
     Lead.countDocuments(filter),
   ]);
 
@@ -186,7 +186,7 @@ const listLeads = asyncHandler(async (req, res) => {
   latestLogs.forEach((l) => { logMap[String(l._id)] = l.remark; });
 
   const leadsWithRemark = leads.map((l) => ({
-    ...l.toObject(),
+    ...l,
     lastRemark: logMap[String(l._id)] || '',
   }));
 
@@ -200,7 +200,8 @@ const dueToday = asyncHandler(async (req, res) => {
     nextFollowUpDate: { $lte: endOfTodayIST() },
   })
     .populate('customerId productIds')
-    .sort({ nextFollowUpDate: 1 });
+    .sort({ nextFollowUpDate: 1 })
+    .lean();
 
   res.json({ leads });
 });
@@ -213,7 +214,8 @@ const followUpPipeline = asyncHandler(async (req, res) => {
     currentStatus: 'follow_up_later',
   })
     .populate('customerId productIds')
-    .sort({ nextFollowUpDate: 1 }); // earliest first (overdue at top)
+    .sort({ nextFollowUpDate: 1 }) // earliest first (overdue at top)
+    .lean();
 
   // Tag each lead: overdue, due-today, or upcoming
   const today = new Date();
@@ -227,7 +229,7 @@ const followUpPipeline = asyncHandler(async (req, res) => {
     if (followDate < todayStart) tag = 'overdue';
     else if (followDate <= today) tag = 'due-today';
     else tag = 'upcoming';
-    return { ...lead.toObject(), tag };
+    return { ...lead, tag };
   });
 
   res.json({ leads: tagged });

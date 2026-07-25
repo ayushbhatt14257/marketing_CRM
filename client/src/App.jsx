@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense, lazy } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { useAuthStore } from './store/authStore';
@@ -8,19 +8,32 @@ import apiClient from './api/client';
 import AppLayout from './components/AppLayout';
 import { RequireAuth, RequireAdmin } from './components/RouteGuards';
 
-import LoginPage from './pages/LoginPage';
-import DashboardPage from './pages/DashboardPage';
-import NewLeadPage from './pages/NewLeadPage';
-import LeadsListPage from './pages/LeadsListPage';
-import LeadDetailPage from './pages/LeadDetailPage';
-import ChangePasswordPage from './pages/ChangePasswordPage';
-import AdminUsersPage from './pages/admin/AdminUsersPage';
-import AdminProductsPage from './pages/admin/AdminProductsPage';
-import AdminCustomersPage from './pages/admin/AdminCustomersPage';
-import AdminBookMatchPage from './pages/admin/AdminBookMatchPage';
-import AdminReportsPage from './pages/admin/AdminReportsPage';
-import AdminUserDetailPage from './pages/admin/AdminUserDetailPage';
-import AdminAssignLeadPage from './pages/admin/AdminAssignLeadPage';
+// Lazy-loaded: each page becomes its own JS chunk, fetched only when actually
+// visited. Regular sales-rep users (the majority of daily traffic) never touch
+// the admin pages, so this keeps their initial load to just what they need
+// instead of shipping the whole admin section (users, reports, book-match, etc.)
+// on every page load.
+const LoginPage = lazy(() => import('./pages/LoginPage'));
+const DashboardPage = lazy(() => import('./pages/DashboardPage'));
+const NewLeadPage = lazy(() => import('./pages/NewLeadPage'));
+const LeadsListPage = lazy(() => import('./pages/LeadsListPage'));
+const LeadDetailPage = lazy(() => import('./pages/LeadDetailPage'));
+const ChangePasswordPage = lazy(() => import('./pages/ChangePasswordPage'));
+const AdminUsersPage = lazy(() => import('./pages/admin/AdminUsersPage'));
+const AdminProductsPage = lazy(() => import('./pages/admin/AdminProductsPage'));
+const AdminCustomersPage = lazy(() => import('./pages/admin/AdminCustomersPage'));
+const AdminBookMatchPage = lazy(() => import('./pages/admin/AdminBookMatchPage'));
+const AdminReportsPage = lazy(() => import('./pages/admin/AdminReportsPage'));
+const AdminUserDetailPage = lazy(() => import('./pages/admin/AdminUserDetailPage'));
+const AdminAssignLeadPage = lazy(() => import('./pages/admin/AdminAssignLeadPage'));
+
+function PageLoader() {
+  return (
+    <div className="min-h-[50vh] flex items-center justify-center">
+      <div className="w-6 h-6 border-2 border-brand-600 border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+}
 
 export default function App() {
   const [bootstrapped, setBootstrapped] = useState(false);
@@ -76,29 +89,31 @@ export default function App() {
   return (
     <>
       <Toaster position="top-right" />
-      <Routes>
-        <Route path="/login" element={<LoginPage />} />
-        <Route element={<RequireAuth />}>
-          <Route element={<AppLayout />}>
-            <Route path="/dashboard" element={<DashboardPage />} />
-            <Route path="/leads/new" element={<NewLeadPage />} />
-            <Route path="/leads" element={<LeadsListPage />} />
-            <Route path="/leads/:id" element={<LeadDetailPage />} />
-            <Route path="/change-password" element={<ChangePasswordPage />} />
-            <Route element={<RequireAdmin />}>
-              <Route path="/admin/assign" element={<AdminAssignLeadPage />} />
-              <Route path="/admin/users" element={<AdminUsersPage />} />
-              <Route path="/admin/users/:id" element={<AdminUserDetailPage />} />
-              <Route path="/admin/products" element={<AdminProductsPage />} />
-              <Route path="/admin/customers" element={<AdminCustomersPage />} />
-              <Route path="/admin/book-match" element={<AdminBookMatchPage />} />
-              <Route path="/admin/reports" element={<AdminReportsPage />} />
+      <Suspense fallback={<PageLoader />}>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route element={<RequireAuth />}>
+            <Route element={<AppLayout />}>
+              <Route path="/dashboard" element={<DashboardPage />} />
+              <Route path="/leads/new" element={<NewLeadPage />} />
+              <Route path="/leads" element={<LeadsListPage />} />
+              <Route path="/leads/:id" element={<LeadDetailPage />} />
+              <Route path="/change-password" element={<ChangePasswordPage />} />
+              <Route element={<RequireAdmin />}>
+                <Route path="/admin/assign" element={<AdminAssignLeadPage />} />
+                <Route path="/admin/users" element={<AdminUsersPage />} />
+                <Route path="/admin/users/:id" element={<AdminUserDetailPage />} />
+                <Route path="/admin/products" element={<AdminProductsPage />} />
+                <Route path="/admin/customers" element={<AdminCustomersPage />} />
+                <Route path="/admin/book-match" element={<AdminBookMatchPage />} />
+                <Route path="/admin/reports" element={<AdminReportsPage />} />
+              </Route>
             </Route>
           </Route>
-        </Route>
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
-      </Routes>
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        </Routes>
+      </Suspense>
     </>
   );
 }

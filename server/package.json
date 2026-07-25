@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
+    "compression": "^1.8.1",
     "cookie-parser": "^1.4.6",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
@@ -22,9 +23,7 @@
     "morgan": "^1.10.0",
     "multer": "^2.2.0",
     "pdfkit": "^0.15.0",
-    "resend": "^4.0.0",
-    "string-similarity": "^4.0.4",
-    "zod": "^3.23.8"
+    "string-similarity": "^4.0.4"
   },
   "devDependencies": {
     "nodemon": "^3.1.4"

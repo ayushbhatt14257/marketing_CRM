@@ -83,43 +83,61 @@ const userPerformance = asyncHandler(async (req, res) => {
   const periodPointsByUser = {};
   agg.forEach((r) => { periodPointsByUser[String(r._id)] = r.total; });
 
-  const results = await Promise.all(
-    users.map(async (user) => {
-      const leadFilter = { ownerId: user._id };
-      if (hasRange) leadFilter.createdAt = dateFilter;
+  const leadDateFilter = hasRange ? { createdAt: dateFilter } : {};
 
-      const [totalLeads, ordersPlaced, dueFollowUps, lowDaysAgg] = await Promise.all([
-        Lead.countDocuments(leadFilter),
-        Lead.countDocuments({ ...leadFilter, currentStatus: 'order_placed' }),
-        Lead.countDocuments({ ownerId: user._id, currentStatus: 'follow_up_later' }),
-        // Days this user worked (entered >=1 lead) but stayed under the 7-leads/day target.
-        Lead.aggregate([
-          { $match: leadFilter },
-          {
-            $group: {
-              _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt', timezone: 'Asia/Kolkata' } },
-              count: { $sum: 1 },
-            },
-          },
-          { $match: { count: { $lt: 7 } } },
-          { $count: 'days' },
-        ]),
-      ]);
+  // Three aggregations cover every user at once, instead of 4 separate queries PER
+  // user (which was 20-30+ round-trips to Mongo on every Reports page load).
+  const [leadTotals, dueFollowUpTotals, lowDayTotals] = await Promise.all([
+    Lead.aggregate([
+      { $match: leadDateFilter },
+      {
+        $group: {
+          _id: '$ownerId',
+          totalLeads: { $sum: 1 },
+          ordersPlaced: { $sum: { $cond: [{ $eq: ['$currentStatus', 'order_placed'] }, 1, 0] } },
+        },
+      },
+    ]),
+    Lead.aggregate([
+      { $match: { currentStatus: 'follow_up_later' } },
+      { $group: { _id: '$ownerId', count: { $sum: 1 } } },
+    ]),
+    Lead.aggregate([
+      { $match: leadDateFilter },
+      {
+        $group: {
+          _id: { ownerId: '$ownerId', date: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt', timezone: 'Asia/Kolkata' } } },
+          count: { $sum: 1 },
+        },
+      },
+      { $match: { count: { $lt: 7 } } },
+      { $group: { _id: '$_id.ownerId', days: { $sum: 1 } } },
+    ]),
+  ]);
 
-      return {
-        userId: user._id,
-        name: user.name,
-        email: user.email,
-        isActive: user.isActive,
-        totalLeads,
-        ordersPlaced,
-        dueFollowUps,
-        lowLeadDays: lowDaysAgg[0]?.days || 0,
-        allTimePoints: user.totalPoints || 0,
-        monthlyPoints: periodPointsByUser[String(user._id)] || 0,
-      };
-    })
-  );
+  const leadTotalsByUser = {};
+  leadTotals.forEach((r) => { leadTotalsByUser[String(r._id)] = r; });
+  const dueFollowUpsByUser = {};
+  dueFollowUpTotals.forEach((r) => { dueFollowUpsByUser[String(r._id)] = r.count; });
+  const lowDaysByUser = {};
+  lowDayTotals.forEach((r) => { lowDaysByUser[String(r._id)] = r.days; });
+
+  const results = users.map((user) => {
+    const uid = String(user._id);
+    const totals = leadTotalsByUser[uid];
+    return {
+      userId: user._id,
+      name: user.name,
+      email: user.email,
+      isActive: user.isActive,
+      totalLeads: totals?.totalLeads || 0,
+      ordersPlaced: totals?.ordersPlaced || 0,
+      dueFollowUps: dueFollowUpsByUser[uid] || 0,
+      lowLeadDays: lowDaysByUser[uid] || 0,
+      allTimePoints: user.totalPoints || 0,
+      monthlyPoints: periodPointsByUser[uid] || 0,
+    };
+  });
 
   res.json({ users: results });
 });
@@ -142,7 +160,8 @@ const userDetail = asyncHandler(async (req, res) => {
   // All leads for this user, with populated customer + products
   const leads = await Lead.find({ ownerId: userId })
     .populate('customerId productIds')
-    .sort({ updatedAt: -1 });
+    .sort({ updatedAt: -1 })
+    .lean();
 
   // Attach latest remark to each lead
   const leadIds = leads.map((l) => l._id);
@@ -155,7 +174,7 @@ const userDetail = asyncHandler(async (req, res) => {
   latestLogs.forEach((l) => { logMap[String(l._id)] = l; });
 
   const leadsWithRemark = leads.map((l) => ({
-    ...l.toObject(),
+    ...l,
     lastLog: logMap[String(l._id)] || null,
   }));
 
@@ -163,7 +182,8 @@ const userDetail = asyncHandler(async (req, res) => {
   const recentActivity = await FollowUpLog.find({ leadId: { $in: leadIds } })
     .populate({ path: 'leadId', populate: { path: 'customerId', select: 'name' } })
     .sort({ createdAt: -1 })
-    .limit(50);
+    .limit(50)
+    .lean();
 
   // Stats
   const [totalLeads, ordersPlaced, followUpsPending, followUpsClosed, newCustomers, todayTalked] = await Promise.all([
