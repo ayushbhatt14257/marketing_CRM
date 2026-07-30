@@ -27,10 +27,21 @@ function startOfWeekIST() {
   return new Date(start.getTime() - diff * 24 * 60 * 60 * 1000);
 }
 
+function startOfLastWeekIST() {
+  const thisWeek = startOfWeekIST();
+  return new Date(thisWeek.getTime() - 7 * 24 * 60 * 60 * 1000);
+}
+
 function startOfMonthIST() {
   const nowIST = toIST(new Date());
   const firstOfMonth = new Date(nowIST.getFullYear(), nowIST.getMonth(), 1);
   return new Date(firstOfMonth.getTime() - IST_OFFSET_MINUTES * 60000);
 }
 
-module.exports = { toIST, startOfTodayIST, endOfTodayIST, startOfWeekIST, startOfMonthIST };
+function startOfLastMonthIST() {
+  const nowIST = toIST(new Date());
+  const firstOfLastMonth = new Date(nowIST.getFullYear(), nowIST.getMonth() - 1, 1);
+  return new Date(firstOfLastMonth.getTime() - IST_OFFSET_MINUTES * 60000);
+}
+
+module.exports = { toIST, startOfTodayIST, endOfTodayIST, startOfWeekIST, startOfLastWeekIST, startOfMonthIST, startOfLastMonthIST };

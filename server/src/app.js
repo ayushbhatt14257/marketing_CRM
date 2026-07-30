@@ -16,6 +16,7 @@ const leadRoutes = require('./routes/leads');
 const dashboardRoutes = require('./routes/dashboard');
 const reportRoutes = require('./routes/reports');
 const bookMatchRoutes = require('./routes/bookMatch');
+const orderRoutes = require('./routes/orders');
 
 const app = express();
 
@@ -44,6 +45,7 @@ app.use('/api/leads', leadRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/book-match', bookMatchRoutes);
+app.use('/api/orders', orderRoutes);
 app.use('/api/notifications', notificationRoutes);
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));

@@ -6,7 +6,7 @@ import { authApi } from './api/endpoints';
 import apiClient from './api/client';
 
 import AppLayout from './components/AppLayout';
-import { RequireAuth, RequireAdmin } from './components/RouteGuards';
+import { RequireAuth, RequireAdmin, RequireStockOrAdmin } from './components/RouteGuards';
 
 // Lazy-loaded: each page becomes its own JS chunk, fetched only when actually
 // visited. Regular sales-rep users (the majority of daily traffic) never touch
@@ -26,6 +26,9 @@ const AdminBookMatchPage = lazy(() => import('./pages/admin/AdminBookMatchPage')
 const AdminReportsPage = lazy(() => import('./pages/admin/AdminReportsPage'));
 const AdminUserDetailPage = lazy(() => import('./pages/admin/AdminUserDetailPage'));
 const AdminAssignLeadPage = lazy(() => import('./pages/admin/AdminAssignLeadPage'));
+const OrdersKanbanPage = lazy(() => import('./pages/OrdersKanbanPage'));
+const AdminStockPage = lazy(() => import('./pages/admin/AdminStockPage'));
+const AdminAnalyticsPage = lazy(() => import('./pages/admin/AdminAnalyticsPage'));
 
 function PageLoader() {
   return (
@@ -98,7 +101,11 @@ export default function App() {
               <Route path="/leads/new" element={<NewLeadPage />} />
               <Route path="/leads" element={<LeadsListPage />} />
               <Route path="/leads/:id" element={<LeadDetailPage />} />
+              <Route path="/orders" element={<OrdersKanbanPage />} />
               <Route path="/change-password" element={<ChangePasswordPage />} />
+              <Route element={<RequireStockOrAdmin />}>
+                <Route path="/stock" element={<AdminStockPage />} />
+              </Route>
               <Route element={<RequireAdmin />}>
                 <Route path="/admin/assign" element={<AdminAssignLeadPage />} />
                 <Route path="/admin/users" element={<AdminUsersPage />} />
@@ -107,6 +114,7 @@ export default function App() {
                 <Route path="/admin/customers" element={<AdminCustomersPage />} />
                 <Route path="/admin/book-match" element={<AdminBookMatchPage />} />
                 <Route path="/admin/reports" element={<AdminReportsPage />} />
+                <Route path="/admin/analytics" element={<AdminAnalyticsPage />} />
               </Route>
             </Route>
           </Route>
