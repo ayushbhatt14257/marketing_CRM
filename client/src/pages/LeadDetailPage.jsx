@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle2, Clock, CreditCard, XCircle } from 'lucide-react';
+import { CheckCircle2, Clock, CreditCard, XCircle, ShoppingCart } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { leadsApi } from '../api/endpoints';
 import StatusSelector from '../components/StatusSelector';
@@ -15,6 +15,7 @@ const STATUS_META = {
 
 export default function LeadDetailPage() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data, isLoading } = useQuery({
     queryKey: ['lead', id],
@@ -88,6 +89,22 @@ export default function LeadDetailPage() {
           </p>
         )}
       </div>
+
+      {/* Create Order button - shows when status is order_placed */}
+      {lead.currentStatus === 'order_placed' && (
+        <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center justify-between">
+          <div>
+            <p className="text-sm font-semibold text-green-800">Order Confirmed</p>
+            <p className="text-xs text-green-700 mt-0.5">Create an order to track delivery and dispatch</p>
+          </div>
+          <button
+            onClick={() => navigate('/orders', { state: { leadId: id, customerId: lead.customerId?._id, customerName: lead.customerId?.name } })}
+            className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 text-sm font-medium transition"
+          >
+            <ShoppingCart size={16} /> Create Order
+          </button>
+        </div>
+      )}
 
       {/* Follow-up form */}
       {!isClosed && (

@@ -101,6 +101,7 @@ export default function AdminUsersPage() {
               className="px-3 py-2 border border-gray-300 rounded-md text-sm" />
             <select value={role} onChange={(e) => setRole(e.target.value)} className="px-3 py-2 border border-gray-300 rounded-md text-sm">
               <option value="user">User</option>
+              <option value="stock_manager">Stock Manager</option>
               <option value="admin">Admin</option>
             </select>
           </div>

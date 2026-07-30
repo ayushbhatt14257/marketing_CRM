@@ -1,8 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { ShoppingCart, Plus } from 'lucide-react';
-import { ordersApi } from '../api/endpoints';
+import { ordersApi, productsApi } from '../api/endpoints';
 import { useAuthStore } from '../store/authStore';
 
 const statusConfig = {
@@ -14,14 +15,68 @@ const statusConfig = {
 
 export default function OrdersKanbanPage() {
   const user = useAuthStore((s) => s.user);
+  const location = useLocation();
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [showDispatchModal, setShowDispatchModal] = useState(false);
   const [dispatchQtys, setDispatchQtys] = useState({});
+  const [showCreateOrder, setShowCreateOrder] = useState(!!location.state?.leadId);
+  const [orderItems, setOrderItems] = useState([]);
+  const [deliveryDate, setDeliveryDate] = useState('');
+  const [creatingOrder, setCreatingOrder] = useState(false);
+
+  // Pre-fill with lead info if coming from LeadDetailPage
+  const leadInfo = location.state || {};
 
   const { data: ordersData, refetch } = useQuery({
     queryKey: ['orders-list'],
     queryFn: () => ordersApi.list().then((r) => r.data),
   });
+
+  const { data: productsData } = useQuery({
+    queryKey: ['products-for-orders'],
+    queryFn: () => productsApi.list().then((r) => r.data),
+    enabled: showCreateOrder,
+  });
+
+  const handleCreateOrder = async () => {
+    if (!leadInfo.leadId || orderItems.length === 0 || !deliveryDate) {
+      toast.error('Fill all fields and add items');
+      return;
+    }
+
+    setCreatingOrder(true);
+    try {
+      const payload = {
+        leadId: leadInfo.leadId,
+        items: orderItems,
+        deliveryDate,
+      };
+      await ordersApi.create(payload);
+      toast.success('Order created and submitted!');
+      setShowCreateOrder(false);
+      setOrderItems([]);
+      setDeliveryDate('');
+      refetch();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Order creation failed');
+    } finally {
+      setCreatingOrder(false);
+    }
+  };
+
+  const addItem = () => {
+    setOrderItems([...orderItems, { productId: '', approvedQty: 0 }]);
+  };
+
+  const removeItem = (idx) => {
+    setOrderItems(orderItems.filter((_, i) => i !== idx));
+  };
+
+  const updateItem = (idx, field, value) => {
+    const updated = [...orderItems];
+    updated[idx][field] = value;
+    setOrderItems(updated);
+  };
 
   const orders = ordersData?.orders || [];
   const byStatus = {
@@ -180,6 +235,94 @@ export default function OrdersKanbanPage() {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {showCreateOrder && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-md w-full p-6 max-h-[80vh] overflow-y-auto">
+            <h3 className="text-lg font-semibold text-gray-800 mb-4">Create Order</h3>
+            
+            <div className="space-y-4 mb-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Customer</label>
+                <p className="text-sm font-medium text-gray-800">{leadInfo.customerName}</p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1.5">Delivery Date</label>
+                <input
+                  type="date"
+                  value={deliveryDate}
+                  onChange={(e) => setDeliveryDate(e.target.value)}
+                  className="w-full border border-gray-300 rounded px-2 py-2 text-sm"
+                  required
+                />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-xs font-medium text-gray-700">Items</label>
+                  <button
+                    onClick={addItem}
+                    className="text-xs text-brand-600 hover:text-brand-700 font-medium flex items-center gap-1"
+                  >
+                    <Plus size={14} /> Add Item
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {orderItems.map((item, idx) => (
+                    <div key={idx} className="flex gap-2 text-sm">
+                      <select
+                        value={item.productId}
+                        onChange={(e) => updateItem(idx, 'productId', e.target.value)}
+                        className="flex-1 border border-gray-300 rounded px-2 py-1"
+                      >
+                        <option value="">Product</option>
+                        {productsData?.products?.map((p) => (
+                          <option key={p._id} value={p._id}>{p.name}</option>
+                        ))}
+                      </select>
+                      <input
+                        type="number"
+                        min="1"
+                        value={item.approvedQty}
+                        onChange={(e) => updateItem(idx, 'approvedQty', Number(e.target.value))}
+                        className="w-16 border border-gray-300 rounded px-2 py-1"
+                        placeholder="Qty"
+                      />
+                      <button
+                        onClick={() => removeItem(idx)}
+                        className="text-red-600 hover:text-red-700 font-medium"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-2 border-t pt-4">
+              <button
+                onClick={() => {
+                  setShowCreateOrder(false);
+                  setOrderItems([]);
+                  setDeliveryDate('');
+                }}
+                className="flex-1 border py-2 rounded-md text-sm font-medium hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateOrder}
+                disabled={creatingOrder || orderItems.length === 0 || !deliveryDate}
+                className="flex-1 bg-brand-600 text-white py-2 rounded-md hover:bg-brand-700 text-sm font-medium disabled:opacity-50"
+              >
+                {creatingOrder ? 'Creating...' : 'Create Order'}
+              </button>
+            </div>
           </div>
         </div>
       )}
