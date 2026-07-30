@@ -13,3 +13,10 @@ export function RequireAdmin() {
   if (user.role !== 'admin') return <Navigate to="/dashboard" replace />;
   return <Outlet />;
 }
+
+export function RequireStockOrAdmin() {
+  const user = useAuthStore((s) => s.user);
+  if (!user) return <Navigate to="/login" replace />;
+  if (!['admin', 'stock_manager'].includes(user.role)) return <Navigate to="/dashboard" replace />;
+  return <Outlet />;
+}

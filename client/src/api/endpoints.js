@@ -66,5 +66,21 @@ export const reportsApi = {
   followUps: () => apiClient.get('/reports/followups'),
   orderConversion: () => apiClient.get('/reports/order-conversion'),
   leadsByDay: (params) => apiClient.get('/reports/leads-by-day', { params }),
+  analytics: () => apiClient.get('/reports/analytics'),
   exportUrl: (type) => `${apiClient.defaults.baseURL}/reports/export?type=${type}`,
+};
+
+export const ordersApi = {
+  list: () => apiClient.get('/orders'),
+  create: (data) => apiClient.post('/orders', data),
+  get: (id) => apiClient.get(`/orders/${id}`),
+  update: (id, data) => apiClient.patch(`/orders/${id}`, data),
+  submit: (id) => apiClient.patch(`/orders/${id}/submit`),
+  dispatch: (id, items) => apiClient.patch(`/orders/${id}/dispatch`, { items }),
+  cancelRemaining: (id, items) => apiClient.patch(`/orders/${id}/cancel-remaining`, { items }),
+};
+
+export const stockApi = {
+  list: (withStock = false) => apiClient.get('/products', { params: { withStock } }),
+  stockIn: (productId, quantity, note) => apiClient.post(`/products/${productId}/stock-in`, { quantity, note }),
 };

@@ -33,4 +33,11 @@ const requireAdmin = (req, res, next) => {
   next();
 };
 
-module.exports = { requireAuth, requireAdmin };
+const requireStockOrAdmin = (req, res, next) => {
+  if (!req.user || !['admin', 'stock_manager'].includes(req.user.role)) {
+    return res.status(403).json({ message: 'Stock manager or admin access required' });
+  }
+  next();
+};
+
+module.exports = { requireAuth, requireAdmin, requireStockOrAdmin };

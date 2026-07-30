@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import {
   LayoutDashboard, List, PlusCircle, Users, Package,
   Contact, FileBarChart, LogOut, Menu, X,
-  UserCheck, KeyRound, FileSearch
+  UserCheck, KeyRound, FileSearch, ShoppingCart, Layers, TrendingUp
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { authApi, dashboardApi } from '../api/endpoints';
@@ -19,10 +19,14 @@ const userLinks = [
   { to: '/change-password', label: 'Change Password', icon: KeyRound },
 ];
 
-const mobileTabLinks = [
-  { to: '/dashboard', label: 'My Day', icon: LayoutDashboard },
-  { to: '/leads/new', label: 'New Entry', icon: PlusCircle },
-  { to: '/leads', label: 'Leads', icon: List },
+const orderLinks = [
+  { to: '/orders', label: 'Orders', icon: ShoppingCart },
+];
+
+const stockManagerLinks = [
+  { to: '/orders', label: 'Orders', icon: ShoppingCart },
+  { to: '/stock', label: 'Stock', icon: Layers },
+  { to: '/admin/analytics', label: 'Analytics', icon: TrendingUp },
 ];
 
 const adminLinks = [
@@ -32,6 +36,13 @@ const adminLinks = [
   { to: '/admin/customers', label: 'Customers', icon: Contact },
   { to: '/admin/book-match', label: 'Book Match', icon: FileSearch },
   { to: '/admin/reports', label: 'Reports', icon: FileBarChart },
+  { to: '/admin/analytics', label: 'Analytics', icon: TrendingUp },
+];
+
+const mobileTabLinks = [
+  { to: '/dashboard', label: 'My Day', icon: LayoutDashboard },
+  { to: '/leads/new', label: 'New Entry', icon: PlusCircle },
+  { to: '/leads', label: 'Leads', icon: List },
 ];
 
 export default function AppLayout() {
@@ -91,7 +102,7 @@ export default function AppLayout() {
     };
   }, [stats, user?.role, queryClient]); // eslint-disable-line
 
-  const links = user?.role === 'admin' ? [...userLinks, ...adminLinks] : userLinks;
+  const links = user?.role === 'admin' ? [...userLinks, ...adminLinks] : user?.role === 'stock_manager' ? [...userLinks, ...stockManagerLinks] : [...userLinks, ...orderLinks];
 
   async function handleLogout() {
     try { await authApi.logout(); } finally {

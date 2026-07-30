@@ -3,7 +3,11 @@ const ExcelJS = require('exceljs');
 const PDFDocument = require('pdfkit');
 const Lead = require('../models/Lead');
 const Product = require('../models/Product');
+const Order = require('../models/Order');
 const asyncHandler = require('../utils/asyncHandler');
+const {
+  startOfWeekIST, startOfLastWeekIST, startOfMonthIST, startOfLastMonthIST,
+} = require('../utils/dateHelpers');
 
 // Shared query builder for "lead activity" style reports, with optional date range
 function buildDateFilter(from, to) {
@@ -153,4 +157,62 @@ const leadsByDay = asyncHandler(async (req, res) => {
   res.json({ days });
 });
 
-module.exports = { leadActivityReport, productWiseReport, followUpReport, orderConversionReport, exportReport, leadsByDay };
+// GET /api/reports/analytics — consolidated data for the Deep Analysis dashboard.
+// Admin only. Everything here is computed live from Lead/Order — nothing cached.
+const analytics = asyncHandler(async (req, res) => {
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+  const [trendRaw, totalLeads, ordersPlacedCount, productPerf, weekCounts, lastWeekCounts, monthCounts, lastMonthCounts] = await Promise.all([
+    // Daily trend, last 30 days — leads entered vs orders placed that day
+    Lead.aggregate([
+      { $match: { createdAt: { $gte: thirtyDaysAgo } } },
+      {
+        $group: {
+          _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt', timezone: 'Asia/Kolkata' } },
+          leadsCount: { $sum: 1 },
+          ordersCount: { $sum: { $cond: [{ $eq: ['$currentStatus', 'order_placed'] }, 1, 0] } },
+        },
+      },
+      { $sort: { _id: 1 } },
+      { $project: { _id: 0, date: '$_id', leadsCount: 1, ordersCount: 1 } },
+    ]),
+    Lead.countDocuments({}),
+    Lead.countDocuments({ currentStatus: 'order_placed' }),
+    // Product-wise sales — approved vs dispatched quantity, from actual Orders
+    Order.aggregate([
+      { $unwind: '$items' },
+      {
+        $group: {
+          _id: '$items.productId',
+          approvedQty: { $sum: '$items.approvedQty' },
+          dispatchedQty: { $sum: '$items.dispatchedQty' },
+        },
+      },
+      { $lookup: { from: 'products', localField: '_id', foreignField: '_id', as: 'product' } },
+      { $unwind: '$product' },
+      { $project: { _id: 0, productName: '$product.name', approvedQty: 1, dispatchedQty: 1 } },
+      { $sort: { approvedQty: -1 } },
+      { $limit: 15 },
+    ]),
+    Lead.countDocuments({ createdAt: { $gte: startOfWeekIST() } }),
+    Lead.countDocuments({ createdAt: { $gte: startOfLastWeekIST(), $lt: startOfWeekIST() } }),
+    Lead.countDocuments({ createdAt: { $gte: startOfMonthIST() } }),
+    Lead.countDocuments({ createdAt: { $gte: startOfLastMonthIST(), $lt: startOfMonthIST() } }),
+  ]);
+
+  const conversionRate = totalLeads > 0 ? Number(((ordersPlacedCount / totalLeads) * 100).toFixed(1)) : 0;
+
+  res.json({
+    trend: trendRaw,
+    funnel: { totalLeads, ordersPlaced: ordersPlacedCount, conversionRate },
+    productPerformance: productPerf,
+    comparison: {
+      thisWeek: weekCounts,
+      lastWeek: lastWeekCounts,
+      thisMonth: monthCounts,
+      lastMonth: lastMonthCounts,
+    },
+  });
+});
+
+module.exports = { leadActivityReport, productWiseReport, followUpReport, orderConversionReport, exportReport, leadsByDay, analytics };
